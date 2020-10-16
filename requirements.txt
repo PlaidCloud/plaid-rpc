@@ -1,0 +1,14 @@
+comtypes;platform_system=="Windows"
+psycopg2-binary
+requests
+requests_futures
+setuptools
+orjson
+six
+sqlalchemy
+sqlalchemy-greenplum
+sqlalchemy-hana
+toolz==0.10.0
+tornado
+unicodecsv
+urllib3
