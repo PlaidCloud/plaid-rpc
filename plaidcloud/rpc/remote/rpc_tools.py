@@ -3,7 +3,7 @@
 
 from __future__ import absolute_import
 
-from plaidtools.remote.json_rpc_server import get_callable_object, BASE_MODULE_PATH
+from plaidcloud.rpc.remote.json_rpc_server import get_callable_object, BASE_MODULE_PATH
 
 
 __author__ = 'Paul Morel'

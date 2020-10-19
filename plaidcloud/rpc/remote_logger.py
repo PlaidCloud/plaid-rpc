@@ -6,7 +6,7 @@ from __future__ import absolute_import
 from __future__ import print_function
 from six.moves.urllib.parse import urlparse
 from six import text_type
-from plaidtools.connection.jsonrpc import SimpleRPC
+from plaidcloud.rpc.connection.jsonrpc import SimpleRPC
 
 __author__ = "Paul Morel"
 __maintainer__ = "Paul Morel <paul.morel@tartansolutions.com>"

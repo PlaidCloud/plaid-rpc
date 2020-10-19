@@ -12,7 +12,7 @@ import logging
 import shutil
 from six.moves.urllib.parse import urlparse
 # from six.moves import http_client
-from plaidtools.remote.abstract import Abstract
+from plaidcloud.rpc.remote.abstract import Abstract
 import warnings
 from functools import reduce
 

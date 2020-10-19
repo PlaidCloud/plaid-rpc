@@ -7,8 +7,8 @@ import six
 import sqlalchemy
 from sqlalchemy_greenplum.dialect import GreenplumDialect
 
-from plaidtools.rpc_connect import Connect
-from plaidtools.type_conversion import sqlalchemy_from_dtype
+from plaidcloud.rpc.rpc_connect import Connect
+from plaidcloud.rpc.type_conversion import sqlalchemy_from_dtype
 
 SCHEMA_PREFIX = 'anlz'
 

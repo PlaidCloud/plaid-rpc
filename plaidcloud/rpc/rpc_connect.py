@@ -15,9 +15,9 @@ from concurrent.futures import ThreadPoolExecutor
 
 import six
 import six.moves.urllib_parse
-from plaidtools.connection.jsonrpc import SimpleRPC
-from plaidtools.remote import listener
-from plaidtools.config import PlaidConfig
+from plaidcloud.rpc.connection.jsonrpc import SimpleRPC
+from plaidcloud.rpc.remote import listener
+from plaidcloud.rpc.config import PlaidConfig
 
 __author__ = 'Charlie Laymon'
 __maintainer__ = 'Charlie Laymon <charlie.laymon@tartansolutions.com>'

@@ -1,7 +1,7 @@
 # coding=utf-8
 
 from __future__ import absolute_import
-from plaidtools import utc
+from plaidcloud.rpc import utc
 from six import text_type
 
 __author__ = 'Paul Morel'

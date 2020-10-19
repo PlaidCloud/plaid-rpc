@@ -7,7 +7,7 @@ import warnings
 
 from time import time
 
-from plaidtools.remote.abstract import Abstract
+from plaidcloud.rpc.remote.abstract import Abstract
 
 __author__ = 'Paul Morel'
 __maintainer__ = 'Paul Morel <paul.morel@tartansolutions.com>'

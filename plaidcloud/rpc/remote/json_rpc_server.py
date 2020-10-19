@@ -11,7 +11,7 @@ from toolz.dicttoolz import merge
 from tornado import gen
 from six.moves import map
 
-from plaidtools.remote.rpc_common import call_as_coroutine
+from plaidcloud.rpc.remote.rpc_common import call_as_coroutine
 
 __author__ = "Paul Morel"
 __copyright__ = "© Copyright 2017-2019, Tartan Solutions, Inc"

@@ -9,7 +9,7 @@ import os
 
 from six import text_type
 
-from plaidtools.rpc_connect import Connect
+from plaidcloud.rpc.rpc_connect import Connect
 
 __author__ = "Paul Morel"
 __copyright__ = "© Copyright 2019, Tartan Solutions, Inc"

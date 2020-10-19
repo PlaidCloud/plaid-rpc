@@ -1,8 +1,8 @@
 # coding=utf-8
 
 from __future__ import absolute_import
-from plaidtools.remote.abstract import Abstract
-from plaidtools.remote.connect import quick_connect, send_as_json
+from plaidcloud.rpc.remote.abstract import Abstract
+from plaidcloud.rpc.remote.connect import quick_connect, send_as_json
 
 __author__ = 'Paul Morel'
 __maintainer__ = 'Paul Morel <paul.morel@tartansolutions.com>'

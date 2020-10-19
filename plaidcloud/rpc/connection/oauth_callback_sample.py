@@ -1,6 +1,8 @@
 """Example of a handler script for custom protocols."""
 import sys
 
+#TODO: maybe remove
+
 
 def callback(args):
     # Make sure we have only one arg, the URL

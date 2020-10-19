@@ -6,7 +6,7 @@ __maintainer__ = 'Adams Tower <adams.tower@tartansolutions.com>'
 __copyright__ = '© Copyright 2017, Tartan Solutions, Inc'
 __license__ = 'Proprietary'
 
-from plaidtools.remote.connect import quick_connect, request_cb, requests_cb
+from plaidcloud.rpc.remote.connect import quick_connect, request_cb, requests_cb
 
 
 def get_connection_params(auth, cloud, connection, base_uri=None, verify_ssl=None):

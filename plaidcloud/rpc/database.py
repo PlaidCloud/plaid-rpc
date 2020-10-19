@@ -24,7 +24,7 @@ from sqlalchemy.types import TypeDecorator, DateTime, Unicode, CHAR, TEXT, NVARC
 from sqlalchemy_hana.dialect import HANABaseDialect
 from sqlalchemy_greenplum.dialect import GreenplumDialect
 
-from plaidtools import config
+from plaidcloud.rpc import config
 
 conf = config.get_dict()
 logger = logging.getLogger(__name__)

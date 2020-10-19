@@ -8,8 +8,8 @@ import orjson as json
 import tornado.web
 from tornado import gen
 
-from plaidtools.remote.json_rpc_server import execute_json_rpc
-from plaidtools.orjson import unsupported_object_json_encoder
+from plaidcloud.rpc.remote.json_rpc_server import execute_json_rpc
+from plaidcloud.rpc.orjson import unsupported_object_json_encoder
 
 
 class JsonRpcHandler(tornado.web.RequestHandler):

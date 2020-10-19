@@ -17,7 +17,7 @@ import glob
 import six
 import six.moves
 
-from plaidtools.file_helpers import makedirs
+from plaidcloud.rpc.file_helpers import makedirs
 
 # Make a logger
 logger = logging.getLogger(__name__)

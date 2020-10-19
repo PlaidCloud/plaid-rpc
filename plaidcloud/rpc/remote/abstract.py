@@ -2,7 +2,7 @@
 
 from __future__ import absolute_import
 from six.moves.urllib.parse import urlparse
-from plaidtools.remote.connect import Connect
+from plaidcloud.rpc.remote.connect import Connect
 
 __author__ = 'Paul Morel'
 __maintainer__ = 'Paul Morel <paul.morel@tartansolutions.com>'

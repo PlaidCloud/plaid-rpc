@@ -15,9 +15,9 @@ import orjson as json
 
 from toolz.dicttoolz import assoc
 
-from plaidtools.remote.json_rpc_handler import unsupported_object_json_encoder
-from plaidtools.remote.rpc_tools import PlainRPCCommon
-from plaidtools.remote.rpc_common import RPCError, WARNING_CODE
+from plaidcloud.rpc.remote.json_rpc_handler import unsupported_object_json_encoder
+from plaidcloud.rpc.remote.rpc_tools import PlainRPCCommon
+from plaidcloud.rpc.remote.rpc_common import RPCError, WARNING_CODE
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
