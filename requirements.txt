@@ -1,5 +1,11 @@
 comtypes;platform_system=="Windows"
+messytables
+minimock
+nose
 psycopg2-binary
+pytest
+pytest-cov
+pyyaml
 requests
 requests_futures
 setuptools
@@ -12,3 +18,4 @@ toolz==0.10.0
 tornado
 unicodecsv
 urllib3
+xlrd
