@@ -1,8 +1,8 @@
 #!/usr/bin/env groovy
 
-image_name = "plaidcloud/plaidtools"
+image_name = "plaidcloud/plaidcloud-rpc"
 
-podTemplate(label: 'plaidtools',
+podTemplate(label: 'plaidcloud-rpc',
   containers: [
     containerTemplate(name: 'docker', image: 'docker:18.09.9-git', ttyEnabled: true, command: 'cat'),
     containerTemplate(name: 'kubectl', image: "lachlanevenson/k8s-kubectl:v1.15.9", ttyEnabled: true, command: 'cat')
@@ -10,7 +10,7 @@ podTemplate(label: 'plaidtools',
   serviceAccount: 'jenkins'
 )
 {
-  node(label: 'plaidtools') {
+  node(label: 'plaidcloud-rpc') {
     properties([
       parameters([
         booleanParam(name: 'no_cache', defaultValue: false, description: 'Adds --no-cache flag to docker build command(s).'),
@@ -41,17 +41,17 @@ podTemplate(label: 'plaidtools',
 
               stage('Run Linter') {
                 if (CHANGE_BRANCH == 'master' || params.full_lint) {
-                  image.withRun('-t', 'bash -c "pylint plaidtools -j 0 -f parseable -r no>pylint.log"') {c ->
+                  image.withRun('-t', 'bash -c "pylint plaidcloud.rpc -j 0 -f parseable -r no>pylint.log"') {c ->
                     sh """
                       docker wait ${c.id}
-                      docker cp ${c.id}:/home/plaid/src/plaidtools/pylint.log pylint.log
+                      docker cp ${c.id}:/home/plaid/src/plaidcloud-rpc/pylint.log pylint.log
                     """
                   }
                 } else {
                   image.withRun('-t') {c ->
                     sh """
                       docker wait ${c.id}
-                      docker cp ${c.id}:/home/plaid/src/plaidtools/pylint.log pylint.log
+                      docker cp ${c.id}:/home/plaid/src/plaidcloud-rpc/pylint.log pylint.log
                     """
                   }
                 }
@@ -66,8 +66,8 @@ podTemplate(label: 'plaidtools',
                 image.withRun("-t", "pytest") {c ->
                   sh """
                     docker wait ${c.id}
-                    docker cp ${c.id}:/home/plaid/src/plaidtools/pytestresult.xml pytestresult.xml
-                    docker cp ${c.id}:/home/plaid/src/plaidtools/coverage.xml coverage.xml
+                    docker cp ${c.id}:/home/plaid/src/plaidcloud-rpc/pytestresult.xml pytestresult.xml
+                    docker cp ${c.id}:/home/plaid/src/plaidcloud-rpc/coverage.xml coverage.xml
                   """
                 }
                 junit 'pytestresult.xml'
