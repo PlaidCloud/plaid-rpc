@@ -29,9 +29,14 @@ except ImportError:
 except:
     print('This is probably not a repo, a copy of the code.')
 
+from os import path
+this_directory = path.abspath(path.dirname(__file__))
+with open(path.join(this_directory, 'README.md'), encoding='utf-8') as f:
+    long_description = f.read()
 
 setup(
     name='plaidcloud-rpc',
+    version="1.0.1",
     author='Michael Rea',
     author_email='michael.rea@tartansolutions.com',
     packages=['plaidcloud.rpc', 'plaidcloud.rpc.connection', 'plaidcloud.rpc.remote'],
@@ -58,4 +63,6 @@ setup(
         # 'https://github.com/PlaidCloud/sqlalchemy-greenplum/tarball/master#egg=sqlalchemy-greenplum-0.0.1',
         'file:///usr/sap/hdbclient/hdbcli-2.2.36.tar.gz#egg=hdbcli'
     ],
+    long_description=long_description,
+    long_description_content_type='text/markdown',
 )
