@@ -37,6 +37,7 @@ setup(
     packages=['plaidcloud.rpc', 'plaidcloud.rpc.connection', 'plaidcloud.rpc.remote'],
     install_requires=[
         'comtypes;platform_system=="Windows"',
+        'messytables',
         'psycopg2-binary',
         'requests',
         'requests_futures',
@@ -56,6 +57,6 @@ setup(
     extras_require=extras,
     dependency_links=[
         # 'https://github.com/PlaidCloud/sqlalchemy-greenplum/tarball/master#egg=sqlalchemy-greenplum-0.0.1',
-        'file:///usr/sap/hdbclient/hdbcli-2.2.36.tar.gz#egg=hdbcli'
+        # 'file:///usr/sap/hdbclient/hdbcli-2.2.36.tar.gz#egg=hdbcli'
     ],
 )
