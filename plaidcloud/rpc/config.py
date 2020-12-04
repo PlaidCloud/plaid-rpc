@@ -199,7 +199,6 @@ class PlaidConfig(object):
     _project_id = ''
     _workflow_id = ''
     _step_id = ''
-    branch = ''
     workspace_id = 0
     workspace_uuid = ''
     # Members used for local setup
@@ -238,7 +237,6 @@ class PlaidConfig(object):
                 self.rpc_uri = os.environ['__PLAID_RPC_URI__']
                 self.auth_token = os.environ['__PLAID_RPC_AUTH_TOKEN__']
                 self._project_id = os.environ['__PLAID_PROJECT_ID__']
-                self.branch = os.environ['__PLAID_BRANCH__']
                 self.workspace_id = int(os.environ['__PLAID_WORKSPACE_ID__'])
                 self.workspace_uuid = os.environ['__PLAID_WORKSPACE_UUID__']
                 self._workflow_id = os.environ['__PLAID_WORKFLOW_ID__']
@@ -313,7 +311,6 @@ class PlaidConfig(object):
             self._project_id = self.config.get('project_id', '')
             self._workflow_id = self.config.get('workflow_id', '')
             self._step_id = self.config.get('step_id', '')
-            self.branch = self.config.get('branch', 'master')
             self.name = self.config.get('name')
 
             # No need for an auth code if we already have a token.
@@ -321,11 +318,9 @@ class PlaidConfig(object):
 
             if all([
                 isinstance(self._project_id, six.string_types),
-                isinstance(self.branch, six.string_types),
                 isinstance(self.workspace_id, six.integer_types)
             ]):
                 os.environ['__PLAID_PROJECT_ID__'] = self._project_id
-                os.environ['__PLAID_BRANCH__'] = self.branch
                 os.environ['__PLAID_WORKSPACE_ID__'] = six.text_type(self.workspace_id)
                 os.environ['__PLAID_WORKSPACE_UUID__'] = self.workspace_uuid
                 os.environ['__PLAID_WORKFLOW_ID__'] = self._workflow_id
