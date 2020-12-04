@@ -26,6 +26,13 @@ from sqlalchemy_greenplum.dialect import GreenplumDialect
 
 from plaidcloud.rpc import config
 
+__author__ = 'Paul Morel'
+__copyright__ = 'Copyright 2010-2020, Tartan Solutions, Inc'
+__credits__ = ['Paul Morel']
+__license__ = 'Apache 2.0'
+__maintainer__ = 'Paul Morel'
+__email__ = 'paul.morel@tartansolutions.com'
+
 conf = config.get_dict()
 logger = logging.getLogger(__name__)
 

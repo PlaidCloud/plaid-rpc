@@ -8,7 +8,7 @@ import datetime
 __author__ = 'Pat Buxton'
 __maintainer__ = 'Paul Morel'
 __copyright__ = '© Copyright 2020 Tartan Solutions, Inc.'
-__license__ = 'Proprietary'
+__license__ = 'Apache 2.0'
 
 
 def unsupported_object_json_encoder(obj):

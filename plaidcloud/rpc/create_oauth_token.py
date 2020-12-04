@@ -6,6 +6,12 @@ from __future__ import print_function
 import requests
 from six.moves import input
 
+__author__ = 'Paul Morel'
+__copyright__ = 'Copyright 2010-2020, Tartan Solutions, Inc'
+__credits__ = ['Paul Morel']
+__license__ = 'Apache 2.0'
+__maintainer__ = 'Paul Morel'
+__email__ = 'paul.morel@tartansolutions.com'
 
 def create_oauth_token(grant_type, client_id, client_secret, workspace_id=None, scopes='', username=None, password=None, uri='https://plaidcloud.com/oauth/token', proxy_settings=None):
     """Attempts to create an Oauth2 auth token using the provided data

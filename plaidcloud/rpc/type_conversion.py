@@ -12,6 +12,13 @@ import xlrd
 from plaidcloud.rpc.functions import regex_map, RegexMapKeyError
 from plaidcloud.rpc.database import PlaidUnicode
 
+__author__ = 'Paul Morel'
+__copyright__ = 'Copyright 2010-2020, Tartan Solutions, Inc'
+__credits__ = ['Paul Morel']
+__license__ = 'Apache 2.0'
+__maintainer__ = 'Paul Morel'
+__email__ = 'paul.morel@tartansolutions.com'
+
 _ANALYZE_TYPE = regex_map({
         r'^bool$': 'boolean',
         r'^boolean$': 'boolean',

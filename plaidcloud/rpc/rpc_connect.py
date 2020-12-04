@@ -22,7 +22,7 @@ from plaidcloud.rpc.config import PlaidConfig
 __author__ = 'Charlie Laymon'
 __maintainer__ = 'Charlie Laymon <charlie.laymon@tartansolutions.com>'
 __copyright__ = '© Copyright 2019-2020, Tartan Solutions, Inc'
-__license__ = 'Proprietary'
+__license__ = 'Apache 2.0'
 
 
 class Connect(SimpleRPC, PlaidConfig):

@@ -25,6 +25,12 @@ logger = logging.getLogger(__name__)
 
 WARNING_CODE = -1000
 
+__author__ = 'Paul Morel'
+__copyright__ = 'Copyright 2010-2020, Tartan Solutions, Inc'
+__credits__ = ['Paul Morel']
+__license__ = 'Apache 2.0'
+__maintainer__ = 'Paul Morel'
+__email__ = 'paul.morel@tartansolutions.com'
 
 def rpc_error(message, data=None, code=-32603):
     return {

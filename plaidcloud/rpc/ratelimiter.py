@@ -8,7 +8,7 @@ import time
 __author__ = "Brian McFadden"
 __copyright__ = "Copyright 2011, Tartan Solutions, Inc."
 __credits__ = ["Paul Morel", "Brian McFadden", "Michael Rea", "Dan Hummon"]
-__license__ = "Proprietary"
+__license__ = "Apache 2.0"
 __maintainer__ = "Tartan Solutions"
 __email__ = "brian.mcfadden@tartansolutions.com"
 

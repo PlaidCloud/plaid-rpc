@@ -19,6 +19,13 @@ import six.moves
 
 from plaidcloud.rpc.file_helpers import makedirs
 
+__author__ = 'Paul Morel'
+__copyright__ = 'Copyright 2010-2020, Tartan Solutions, Inc'
+__credits__ = ['Paul Morel']
+__license__ = 'Apache 2.0'
+__maintainer__ = 'Paul Morel'
+__email__ = 'paul.morel@tartansolutions.com'
+
 # Make a logger
 logger = logging.getLogger(__name__)
 logger.addHandler(logging.NullHandler())

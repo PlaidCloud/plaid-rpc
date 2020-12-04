@@ -7,7 +7,7 @@ from six import text_type
 __author__ = 'Paul Morel'
 __maintainer__ = 'Paul Morel <paul.morel@tartansolutions.com>'
 __copyright__ = '© Copyright 2017, Tartan Solutions, Inc'
-__license__ = 'Proprietary'
+__license__ = 'Apache 2.0'
 
 
 def user_auth(*args, **kwargs):

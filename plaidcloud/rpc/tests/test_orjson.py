@@ -12,7 +12,7 @@ from plaidcloud.rpc.orjson import unsupported_object_json_encoder as enc
 __author__ = "Pat Buxton"
 __copyright__ = "© Copyright 2020, Tartan Solutions, Inc"
 __credits__ = ["Pat Buxton"]
-__license__ = "Proprietary"
+__license__ = "Apache 2.0"
 __maintainer__ = "Pat Buxton"
 __email__ = "patrick.buxton@tartansolutions.com"
 

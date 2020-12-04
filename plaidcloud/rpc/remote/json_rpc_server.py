@@ -16,7 +16,7 @@ from plaidcloud.rpc.remote.rpc_common import call_as_coroutine
 __author__ = "Paul Morel"
 __copyright__ = "© Copyright 2017-2019, Tartan Solutions, Inc"
 __credits__ = ["Paul Morel"]
-__license__ = "Proprietary"
+__license__ = "Apache 2.0"
 __maintainer__ = "Paul Morel"
 __email__ = "paul.morel@tartansolutions.com"
 

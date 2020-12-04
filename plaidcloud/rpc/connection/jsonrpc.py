@@ -25,7 +25,7 @@ __author__ = 'Paul Morel'
 __credits__ = ['Paul Morel', 'Adams Tower']
 __maintainer__ = 'Adams Tower <adams.tower@tartansolutions.com>'
 __copyright__ = '© Copyright 2019, Tartan Solutions, Inc'
-__license__ = 'Proprietary'
+__license__ = 'Apache 2.0'
 
 STREAM_ENDPOINTS = {
     'analyze/query/download_csv',

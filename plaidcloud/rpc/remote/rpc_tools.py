@@ -9,7 +9,7 @@ from plaidcloud.rpc.remote.json_rpc_server import get_callable_object, BASE_MODU
 __author__ = 'Paul Morel'
 __maintainer__ = 'Paul Morel <paul.morel@tartansolutions.com>'
 __copyright__ = '© Copyright 2018-2020, Tartan Solutions, Inc'
-__license__ = 'Proprietary'
+__license__ = 'Apache 2.0'
 
 
 def _create_rpc_args(method, params):

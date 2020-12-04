@@ -11,6 +11,12 @@ from tornado import gen
 from plaidcloud.rpc.remote.json_rpc_server import execute_json_rpc
 from plaidcloud.rpc.orjson import unsupported_object_json_encoder
 
+__author__ = 'Paul Morel'
+__copyright__ = 'Copyright 2017-2020, Tartan Solutions, Inc'
+__credits__ = ['Paul Morel']
+__license__ = 'Apache 2.0'
+__maintainer__ = 'Paul Morel'
+__email__ = 'paul.morel@tartansolutions.com'
 
 class JsonRpcHandler(tornado.web.RequestHandler):
     """

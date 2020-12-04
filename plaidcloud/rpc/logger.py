@@ -14,7 +14,7 @@ from plaidcloud.rpc.rpc_connect import Connect
 __author__ = "Paul Morel"
 __copyright__ = "© Copyright 2019, Tartan Solutions, Inc"
 __credits__ = ["Paul Morel"]
-__license__ = "Proprietary"
+__license__ = "Apache 2.0"
 __email__ = "paul.morel@tartansolutions.com"
 
 # This sets the basic format of our remote logs.

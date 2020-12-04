@@ -16,6 +16,13 @@ if sys.version_info >= (3, 0):
 else:
     from six.moves.winreg import ConnectRegistry, OpenKey, QueryValueEx, HKEY_LOCAL_MACHINE
 
+__author__ = 'Paul Morel'
+__copyright__ = 'Copyright 2010-2020, Tartan Solutions, Inc'
+__credits__ = ['Paul Morel']
+__license__ = 'Apache 2.0'
+__maintainer__ = 'Paul Morel'
+__email__ = 'paul.morel@tartansolutions.com'
+
 
 def get_pcm_install_directory():
     registry = ConnectRegistry(None, HKEY_LOCAL_MACHINE)

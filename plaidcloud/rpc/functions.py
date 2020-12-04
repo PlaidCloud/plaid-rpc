@@ -22,7 +22,7 @@ __author__ = 'Adams Tower'
 __credits__ = ['Adams Tower', 'Paul Morel']
 __maintainer__ = 'Adams Tower'
 __copyright__ = '© Copyright 2011-2018 Tartan Solutions, Inc.'
-__license__ = 'Proprietary'
+__license__ = 'Apache 2.0'
 
 
 def try_except(success, failure):

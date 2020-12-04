@@ -19,7 +19,7 @@ import plaidcloud.rpc.rpc_connect as connect
 __author__ = "Pat Buxton"
 __copyright__ = "© Copyright 2019, Tartan Solutions, Inc"
 __credits__ = ["Pat Buxton"]
-__license__ = "Proprietary"
+__license__ = "Apache 2.0"
 __maintainer__ = "Pat Buxton"
 __email__ = "patrick.buxton@tartansolutions.com"
 
