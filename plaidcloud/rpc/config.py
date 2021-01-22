@@ -8,6 +8,7 @@ from __future__ import absolute_import
 from __future__ import print_function
 
 import os
+from pathlib import Path
 import logging
 import datetime
 import shlex
@@ -29,6 +30,9 @@ __email__ = 'paul.morel@tartansolutions.com'
 # Make a logger
 logger = logging.getLogger(__name__)
 logger.addHandler(logging.NullHandler())
+
+CONFIG_NAME = 'plaid.conf'
+CONFIG_DIR = '.plaid'
 
 # Module level CONFIG dict - mutable, and importable from this module.
 CONFIG = {}
@@ -286,7 +290,7 @@ class PlaidConfig(object):
             else:
                 # Option A:  See if this is set in an envir
                 # Need to perform a directed search upward to find the first plaid.conf file
-                self.cfg_path = find_plaid_conf()
+                self.cfg_path = str(find_plaid_conf())
 
             if not isinstance(self.cfg_path, six.string_types):
                 raise Exception('ERROR: No RPC connection configuration available.')
@@ -441,40 +445,44 @@ class PlaidConfig(object):
             raise Exception('Step Id has not been set')
         return self._step_id
 
+def find_plaid_conf(path=None):
+     """Finds plaid.conf by searching upwards for first plaid.conf it finds"""
+     root = find_workspace_root(path)
+     direct = root.joinpath(CONFIG_NAME)
+     one_down = root.joinpath(CONFIG_DIR, CONFIG_NAME)
+     if direct.exists():
+         return direct
+     elif one_down.exists():
+         return one_down
+     else:
+         raise Exception(
+             f'This should never happen, but neither {str(direct)} nor '
+             f'{str(one_down)} exist.'
+         )
 
-def find_plaid_conf(search_name='plaid.conf', check_sub_folder='.plaid'):
-    """Finds plaid.conf by searching upwards for first plaid.conf it finds"""
-    current_directory_path = os.getcwd()
-    result = walk_up(current_directory_path, search_name, check_sub_folder)
-    if not result:
-        raise Exception(
-            'Could not find the plaid.conf, starting at {}, checking sub_folder {}'.format(
-                current_directory_path, check_sub_folder
-            )
-        )
-    return result
+def find_workspace_root(path=None):
+     """Finds the workspace root by searching upwards for first plaid.conf it finds"""
+     if path:
+         path = Path(path).resolve()
+     else:
+         path = Path.cwd()
 
+     def recurse(path):
+         if (
+             path.joinpath(CONFIG_NAME).exists()
+             or path.joinpath(CONFIG_DIR, CONFIG_NAME).exists()
+         ):
+             return path
+         elif path == path.parent:
+             # We've hit the filesystem root
+             raise Exception(
+                 f'Could not find {CONFIG_NAME}, starting at {str(path)}, '
+                 f'checking sub_folder {CONFIG_DIR}'
+             )
+         else:
+             return recurse(path.parent)
 
-def walk_up(path, search_name, check_sub_folder=None):
-    real_path = os.path.relpath(path)
-    names = os.listdir(real_path)
-
-    if search_name in names:
-        return os.path.join(path, search_name)
-
-    if check_sub_folder is not None and check_sub_folder in names:
-        sub_folder_path = os.path.realpath(os.path.join(real_path, check_sub_folder))
-        sub_names = os.listdir(sub_folder_path)
-        if search_name in sub_names:
-            return os.path.join(sub_folder_path, search_name)
-
-    if path == '/' or (os.name == 'nt' and os.path.ismount(path)):
-        return None
-
-    new_path = os.path.realpath(os.path.join(real_path, '..'))
-    return walk_up(new_path, search_name, check_sub_folder)
-
-
+     return recurse(Path.cwd())
 
 # TARGET_WORKING_DIRECTORY = os.path.abspath(os.path.dirname(__file__))
 # CONFIG_PATH = ('{}/config/'.format(TARGET_WORKING_DIRECTORY))
