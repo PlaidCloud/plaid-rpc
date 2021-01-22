@@ -1,90 +1,63 @@
 #!/usr/bin/env groovy
-
-image_name = "plaidcloud/plaidcloud-rpc"
-
-podTemplate(label: 'plaidcloud-rpc',
+podTemplate(label: 'plaid-rpc',
   containers: [
-    containerTemplate(name: 'docker', image: 'docker:18.09.9-git', ttyEnabled: true, command: 'cat'),
-    containerTemplate(name: 'kubectl', image: "lachlanevenson/k8s-kubectl:v1.15.9", ttyEnabled: true, command: 'cat')
+    containerTemplate(name: 'build', image: "gcr.io/plaidcloud-build/tools/python-build:latest", ttyEnabled: true, command: 'cat', alwaysPullImage: true, workingDir: '/home/jenkins/agent')
   ],
-  serviceAccount: 'jenkins'
+  serviceAccount: 'jenkins',
+  imagePullSecrets: ['gcr-key']
 )
 {
-  node(label: 'plaidcloud-rpc') {
+  node(label: 'plaid-rpc') {
     properties([
+      [$class: 'JiraProjectProperty'], buildDiscarder(logRotator(artifactDaysToKeepStr: '', artifactNumToKeepStr: '10', daysToKeepStr: '', numToKeepStr: '50')),
       parameters([
-        booleanParam(name: 'no_cache', defaultValue: false, description: 'Adds --no-cache flag to docker build command(s).'),
-        booleanParam(name: 'full_lint', defaultValue: true, description: 'Perform full lint on a PR build.')
+        booleanParam(name: 'no_cache', defaultValue: true, description: 'Adds --no-cache flag to docker build command(s).'),
+        booleanParam(name: 'skip_lint', defaultValue: false, description: 'Do not lint.'),
+        booleanParam(name: 'full_lint', defaultValue: false, description: 'Lint all files.'),
+        stringParam(name: 'target_lint_dir', defaultValue: 'plaidcloud', description: 'Name of directory to run linter against.')
       ])
     ])
-    container('docker') {
-      withCredentials([string(credentialsId: 'docker-server-ip', variable: 'host')]) {
-        docker.withServer("$host", "docker-server") {
-          withCredentials([dockerCert(credentialsId: 'docker-server', variable: "DOCKER_CERT_PATH")]) {
-            docker.withRegistry("", "plaid-docker") {
-              // Checkout source before doing anything else
-              scm_map = checkout scm
+    container('build') {
+      scm_map = checkout([
+        $class: 'GitSCM',
+        branches: scm.branches,
+        doGenerateSubmoduleConfigurations: false,
+        extensions: [[$class: 'SubmoduleOption', disableSubmodules: false, parentCredentials: true, recursiveSubmodules: true, reference: '', trackingSubmodules: true]],
+        submoduleCfg: [],
+        userRemoteConfigs: scm.userRemoteConfigs
+      ])
 
-              // When building from a PR event, we want to read the branch name from the CHANGE_BRANCH binding. This binding does not exist on branch events.
-              CHANGE_BRANCH = env.CHANGE_BRANCH ?: scm_map.GIT_BRANCH.minus(~/^origin\//)
+      branch = env.CHANGE_BRANCH ?: scm_map.GIT_BRANCH.minus(~/^origin\//)
 
-              docker_args = ''
+      stage("Run Checks") {
+        if (!params.skip_lint) {
+          sh """
+            lint --target-dir=$params.target_lint_dir --branch=$branch --full-lint=$params.full_lint
+          """
 
-              // Add any extra docker build arguments here.
-              if (params.no_cache) {
-                docker_args += '--no-cache'
-              }
+          if (branch == 'master') {
+            recordIssues tool: pyLint(pattern: 'pylint.log')
+          } else {
+            recordIssues tool: pyLint(pattern: 'pylint.log'), qualityGates: [[threshold: 1, type: 'TOTAL_HIGH', unstable: true]]
+          }
 
-              stage('Build Image') {
-                image = docker.build("${image_name}:test", "--pull ${docker_args} .")
-              }
-
-              stage('Run Linter') {
-                if (CHANGE_BRANCH == 'master' || params.full_lint) {
-                  image.withRun('-t', 'bash -c "pylint plaidcloud.rpc -j 0 -f parseable -r no>pylint.log"') {c ->
-                    sh """
-                      docker wait ${c.id}
-                      docker cp ${c.id}:/home/plaid/src/plaidcloud-rpc/pylint.log pylint.log
-                    """
-                  }
-                } else {
-                  image.withRun('-t') {c ->
-                    sh """
-                      docker wait ${c.id}
-                      docker cp ${c.id}:/home/plaid/src/plaidcloud-rpc/pylint.log pylint.log
-                    """
-                  }
-                }
-                if (CHANGE_BRANCH == 'master') {
-                  recordIssues tool: pyLint(pattern: 'pylint.log')
-                } else {
-                  recordIssues tool: pyLint(pattern: 'pylint.log'), qualityGates: [[threshold: 1, type: 'TOTAL_HIGH', unstable: true]]
-                }
-              }
-
-              stage('Run Tests') {
-                image.withRun("-t", "pytest") {c ->
-                  sh """
-                    docker wait ${c.id}
-                    docker cp ${c.id}:/home/plaid/src/plaidcloud-rpc/pytestresult.xml pytestresult.xml
-                    docker cp ${c.id}:/home/plaid/src/plaidcloud-rpc/coverage.xml coverage.xml
-                  """
-                }
-                junit 'pytestresult.xml'
-                cobertura coberturaReportFile: 'coverage.xml', onlyStable: false, failUnhealthy:false, failUnstable: false, failNoReports: false
-              }
-
-              if (CHANGE_BRANCH == 'master') {
-                stage('Trigger Downstream Jobs') {
-                  build job: 'auth-service/master', parameters: [booleanParam(name: 'no_cache', value: false)], wait: false
-                  build job: 'cron/master', parameters: [booleanParam(name: 'no_cache', value: false)], wait: false
-                  build job: 'data-explorer-service/master', parameters: [booleanParam(name: 'no_cache', value: false)], wait: false
-                  build job: 'git-service/master', parameters: [booleanParam(name: 'no_cache', value: false)], wait: false
-                  build job: 'plaid/master', parameters: [booleanParam(name: 'no_cache', value: false)], wait: false
-                  build job: 'workflow-runner/master', parameters: [booleanParam(name: 'no_cache', value: false)], wait: false
-                }
-              }
-            }
+          // Check licenses on all python packages.
+          license_errors = sh (
+            returnStatus: true,
+            script: '''
+              set +x 
+              cat license-report.txt | grep "UNAUTHORIZED" > /dev/null
+            '''
+          ) == 0
+          if (license_errors) {
+              output = sh returnStdout: true, script: '''
+                set +x 
+                cat license-report.txt | grep "UNAUTHORIZED"
+              '''
+              echo "\nThe following python package licenses are unauthorized:\n\n$output"
+              currentBuild.result = 'UNSTABLE'
+          } else {
+            echo "No licensing issues found."
           }
         }
       }
