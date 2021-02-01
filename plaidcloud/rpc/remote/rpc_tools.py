@@ -3,6 +3,10 @@
 
 from __future__ import absolute_import
 
+import os
+import types
+import tempfile
+
 from plaidcloud.rpc.remote.json_rpc_server import get_callable_object, BASE_MODULE_PATH
 
 
@@ -32,6 +36,14 @@ def get_auth_id(workspace_id, member_id, scopes):
 def direct_rpc(auth_id, method, params):
     callable_object, required_scope, default_error = get_callable_object(method, version=1, base_path=BASE_MODULE_PATH, logger=None)
     result = callable_object(auth_id=auth_id, **params)
+    if isinstance(result, types.GeneratorType):
+        download_folder = os.path.join(tempfile.gettempdir(), "plaid/download")
+        handle, file_name = tempfile.mkstemp(dir=download_folder, prefix="download_", suffix=".tmp")
+        os.close(handle)  # Can't control the access mode, so close this one and open another.
+        with open(file_name, 'wb', buffering=1) as tmp_file:
+            for chunk in result:
+                tmp_file.write(chunk)
+        return file_name
     return result
 
 
