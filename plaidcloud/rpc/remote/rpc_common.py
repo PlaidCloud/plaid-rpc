@@ -7,6 +7,7 @@ from __future__ import absolute_import
 import sys
 import traceback
 import operator
+from bleach import clean
 from operator import itemgetter
 from functools import wraps as _wraps
 from six import string_types
@@ -159,6 +160,13 @@ def rpc_method(required_scope=None, default_error=None, kwarg_transformation=ide
         def wrapper(**kwargs):
             """This is the wrapper that takes the place of the decorated function, handling errors."""
             processed_kwargs = kwarg_transformation(kwargs)
+            def clean_args(arg_dict):
+                for arg in arg_dict:
+                    if isinstance(arg_dict[arg], string_types):
+                        arg_dict[arg] = clean(arg_dict[arg])
+                    elif isinstance(arg_dict[arg], dict):
+                        clean_args(arg_dict[arg])
+            clean_args(processed_kwargs)
             return function(**processed_kwargs)
 
         wrapper.rpc_method = True  # Set a flag that we can check for in the json_rpc handler
