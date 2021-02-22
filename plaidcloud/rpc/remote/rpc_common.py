@@ -162,7 +162,9 @@ def rpc_method(required_scope=None, default_error=None, kwarg_transformation=ide
             processed_kwargs = kwarg_transformation(kwargs)
             def clean_args(arg_dict):
                 for arg in arg_dict:
-                    if isinstance(arg_dict[arg], string_types):
+                    # We don't want to bleach queries, as they can legally include
+                    # > and <.
+                    if isinstance(arg_dict[arg], string_types) and arg != "query":
                         arg_dict[arg] = clean(arg_dict[arg])
                     elif isinstance(arg_dict[arg], dict):
                         clean_args(arg_dict[arg])
