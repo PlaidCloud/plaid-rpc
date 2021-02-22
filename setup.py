@@ -41,6 +41,7 @@ setup(
     author_email='michael.rea@tartansolutions.com',
     packages=['plaidcloud.rpc', 'plaidcloud.rpc.connection', 'plaidcloud.rpc.remote'],
     install_requires=[
+        'bleach',
         'comtypes;platform_system=="Windows"',
         'messytables',
         'psycopg2-binary',
