@@ -167,7 +167,7 @@ def rpc_method(required_scope=None, default_error=None, kwarg_transformation=ide
                         arg_dict[arg] = arg_dict[arg].replace('<', '&lt;').replace('>', '&gt;')
                     elif isinstance(arg_dict[arg], dict):
                         clean_args(arg_dict[arg])
-            clean_args(processed_kwargs)
+            # clean_args(processed_kwargs)
             return function(**processed_kwargs)
 
         wrapper.rpc_method = True  # Set a flag that we can check for in the json_rpc handler
