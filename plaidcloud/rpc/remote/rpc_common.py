@@ -7,6 +7,7 @@ from __future__ import absolute_import
 import sys
 import traceback
 import operator
+import re
 from operator import itemgetter
 from functools import wraps as _wraps
 from six import string_types
@@ -24,6 +25,7 @@ from six.moves import filter
 logger = logging.getLogger(__name__)
 
 WARNING_CODE = -1000
+SCRIPT_REGEX = r'<\s*(\/)?\s*s\s*c\s*r\s*i\s*p\s*t\s*>'  # script tag or closing tag, with any amount of whitespace in between (\s*). Use with re.I flag for case-insensitive.
 
 __author__ = 'Paul Morel'
 __copyright__ = 'Copyright 2010-2020, Tartan Solutions, Inc'
@@ -163,11 +165,11 @@ def rpc_method(required_scope=None, default_error=None, kwarg_transformation=ide
                 for arg in arg_dict:
                     # We don't want to clean queries or UDF code, as they can legally include
                     # > and <. Bleach was a little overzealous, as it was replacing things like &.
-                    if isinstance(arg_dict[arg], string_types) and arg not in ["query", "code"]:
-                        arg_dict[arg] = arg_dict[arg].replace('<', '&lt;').replace('>', '&gt;')
+                    if isinstance(arg_dict[arg], string_types):
+                        arg_dict[arg] = re.sub(SCRIPT_REGEX, "", arg_dict[arg], flags=re.M|re.I)
                     elif isinstance(arg_dict[arg], dict):
                         clean_args(arg_dict[arg])
-            # clean_args(processed_kwargs)
+            clean_args(processed_kwargs)
             return function(**processed_kwargs)
 
         wrapper.rpc_method = True  # Set a flag that we can check for in the json_rpc handler
