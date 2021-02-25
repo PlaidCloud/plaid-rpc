@@ -165,7 +165,7 @@ def rpc_method(required_scope=None, default_error=None, kwarg_transformation=ide
                 for arg in arg_dict:
                     # We don't want to clean queries or UDF code, as they can legally include
                     # > and <. Bleach was a little overzealous, as it was replacing things like &.
-                    if isinstance(arg_dict[arg], string_types) and arg not in ["query", "code"]:
+                    if isinstance(arg_dict[arg], string_types):
                         arg_dict[arg] = re.sub(SCRIPT_REGEX, "", arg_dict[arg], flags=re.M|re.I)
                     elif isinstance(arg_dict[arg], dict):
                         clean_args(arg_dict[arg])
