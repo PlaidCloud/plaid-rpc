@@ -25,7 +25,7 @@ from six.moves import filter
 logger = logging.getLogger(__name__)
 
 WARNING_CODE = -1000
-SCRIPT_REGEX = r'<\s*(/)?\s*s\s*c\s*r\s*i\s*p\s*t\s*>'  # script tag or closing tag, with any amount of whitespace in between (\s*). Use with re.I flag for case-insensitive.
+SCRIPT_REGEX = r'<\s*(\/)?\s*s\s*c\s*r\s*i\s*p\s*t\s*>'  # script tag or closing tag, with any amount of whitespace in between (\s*). Use with re.I flag for case-insensitive.
 
 __author__ = 'Paul Morel'
 __copyright__ = 'Copyright 2010-2020, Tartan Solutions, Inc'
