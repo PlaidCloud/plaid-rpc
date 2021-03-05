@@ -6,17 +6,17 @@ import logging
 import orjson as json
 
 import tornado.web
-from tornado import gen
 
 from plaidcloud.rpc.remote.json_rpc_server import execute_json_rpc
 from plaidcloud.rpc.orjson import unsupported_object_json_encoder
 
 __author__ = 'Paul Morel'
-__copyright__ = 'Copyright 2017-2020, Tartan Solutions, Inc'
+__copyright__ = 'Copyright 2017-2021, Tartan Solutions, Inc'
 __credits__ = ['Paul Morel']
 __license__ = 'Apache 2.0'
 __maintainer__ = 'Paul Morel'
 __email__ = 'paul.morel@tartansolutions.com'
+
 
 class JsonRpcHandler(tornado.web.RequestHandler):
     """
@@ -29,16 +29,16 @@ class JsonRpcHandler(tornado.web.RequestHandler):
         self.base_path = None
         self.extra_params = {}
 
-    def prepare(self):
+    async def prepare(self):
         try:
-            self.validate()
+            await self.validate()
         except Exception as e:
             self.logger.exception('Error in JsonRpcHandler.prepare')
             self.set_header('Content-Type', 'application/json')
             self.set_status(401)
             self.finish(json.dumps({'error': {'message': str(e)}}, default=unsupported_object_json_encoder, option=json.OPT_NAIVE_UTC | json.OPT_NON_STR_KEYS))
 
-    def validate(self):
+    async def validate(self):
         # Tries to run validations in order, stopping at the first one that
         # works, and raising an error if none work.
 
@@ -46,18 +46,17 @@ class JsonRpcHandler(tornado.web.RequestHandler):
         # should also set workspace_id, scopes, and user_id on success.
 
         for v in self.validations:
-            if v():
+            if await v():
                 if 'public' not in self.scopes:
                     self.scopes.add('public')
                 break
         else:
-            self.logger.warning(
-                'No validation methods worked, defaulting to "public" scope only!')
+            self.logger.warning('No validation methods worked, defaulting to "public" scope only!')
             self.workspace_id = None
             self.scopes = {'public'}
             self.user_id = None
 
-    def _validate_pass(self):
+    async def _validate_pass(self):
         # Just pass through with no validation.
         # Probably not a great idea except while debugging.
         self.workspace_id = None
@@ -65,11 +64,10 @@ class JsonRpcHandler(tornado.web.RequestHandler):
         self.user_id = None
         return True
 
-    def _validate_fail(self):
+    async def _validate_fail(self):
         return False
 
-    @gen.coroutine
-    def _process_rpc(self, command, msg):
+    async def _process_rpc(self, command, msg):
         auth_id = {
             'workspace': self.workspace_id,
             'user': self.user_id,
@@ -80,9 +78,9 @@ class JsonRpcHandler(tornado.web.RequestHandler):
         self.logger.debug('About to execute RPC call')
 
         if not self.base_path:
-            result = yield execute_json_rpc(msg, auth_id, logger=self.logger, extra_params=self.extra_params)
+            result = await execute_json_rpc(msg, auth_id, logger=self.logger, extra_params=self.extra_params)
         else:
-            result = yield execute_json_rpc(msg, auth_id, base_path=self.base_path, logger=self.logger, extra_params=self.extra_params)
+            result = await execute_json_rpc(msg, auth_id, base_path=self.base_path, logger=self.logger, extra_params=self.extra_params)
 
         self.logger.debug('RPC call complete - building response')
         if isinstance(result.get('result'), types.GeneratorType):
@@ -90,17 +88,15 @@ class JsonRpcHandler(tornado.web.RequestHandler):
             # transfer encoding to stream it (via tornado yield magic).
             for chunk in result.get('result'):
                 self.write(chunk)
-                yield self.flush()
+                await self.flush()
         else:
             self.write(json.dumps(result, default=unsupported_object_json_encoder, option=json.OPT_NAIVE_UTC | json.OPT_NON_STR_KEYS))
-            self.flush()
+            await self.flush()
         self.finish()
         self.logger.debug('Response Completed')
 
-    @gen.coroutine
-    def post(self, command=None):
-        yield self._process_rpc(command, self.request.body.decode('utf-8'))
+    async def post(self, command=None):
+        await self._process_rpc(command, self.request.body.decode('utf-8'))
 
-    @gen.coroutine
-    def get(self, command=None):
-        yield self._process_rpc(command, self.request.body.decode('utf-8'))
+    async def get(self, command=None):
+        await self._process_rpc(command, self.request.body.decode('utf-8'))
