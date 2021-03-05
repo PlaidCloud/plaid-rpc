@@ -8,12 +8,10 @@ import sys
 import traceback
 import operator
 import re
+import asyncio
 from operator import itemgetter
 from functools import wraps as _wraps
 from six import string_types
-
-from tornado import gen
-from tornado.ioloop import IOLoop
 
 import functools
 from toolz.itertoolz import groupby, concat
@@ -28,11 +26,12 @@ WARNING_CODE = -1000
 SCRIPT_REGEX = r'<\s*(\/)?\s*s\s*c\s*r\s*i\s*p\s*t\s*>'  # script tag or closing tag, with any amount of whitespace in between (\s*). Use with re.I flag for case-insensitive.
 
 __author__ = 'Paul Morel'
-__copyright__ = 'Copyright 2010-2020, Tartan Solutions, Inc'
+__copyright__ = 'Copyright 2010-2021, Tartan Solutions, Inc'
 __credits__ = ['Paul Morel']
 __license__ = 'Apache 2.0'
 __maintainer__ = 'Paul Morel'
 __email__ = 'paul.morel@tartansolutions.com'
+
 
 def rpc_error(message, data=None, code=-32603):
     return {
@@ -46,7 +45,7 @@ def get_isolation_from_auth_id(auth_id):
     # TODO: make this actually work?
     # This will be used heavily to associate the auth_id token with an actual user
     # This should probably be a decorator
-    return (auth_id['workspace'], auth_id['user'])
+    return auth_id['workspace'], auth_id['user']
 
 
 def get_filter_matches(all_values, text, criteria='exact', key=None):
@@ -123,15 +122,14 @@ def subcall(rpc_output):
     #     raise RPCError(**err)
 
 
-@gen.coroutine
-def cosubcall(rpc_future):
+async def cosubcall(rpc_future):
     """
     Just like subcall, except it works inside a coroutine.
     """
 
-    result, err = yield rpc_future
+    result, err = await rpc_future
     if err is None:
-        raise gen.Return(result)
+        return result
     else:
         raise RPCError(**err)
 
@@ -149,7 +147,6 @@ def rpc_method(required_scope=None, default_error=None, kwarg_transformation=ide
             ...
             return result
     """
-
     def real_decorator(function):
         """This is the real decorator, with error_string closed over."""
 
@@ -158,19 +155,24 @@ def rpc_method(required_scope=None, default_error=None, kwarg_transformation=ide
         #  arguments, nor do they ever get passed in, anyway. We might want to
         #  change that, we might not.
         @_wraps(function)
-        def wrapper(**kwargs):
+        async def wrapper(**kwargs):
             """This is the wrapper that takes the place of the decorated function, handling errors."""
-            processed_kwargs = kwarg_transformation(kwargs)
-            def clean_args(arg_dict):
-                for arg in arg_dict:
-                    # We don't want to clean queries or UDF code, as they can legally include
-                    # > and <. Bleach was a little overzealous, as it was replacing things like &.
-                    if isinstance(arg_dict[arg], string_types):
-                        arg_dict[arg] = re.sub(SCRIPT_REGEX, "", arg_dict[arg], flags=re.M|re.I)
-                    elif isinstance(arg_dict[arg], dict):
-                        clean_args(arg_dict[arg])
-            clean_args(processed_kwargs)
-            return function(**processed_kwargs)
+            try:
+                processed_kwargs = kwarg_transformation(kwargs)
+                def clean_args(arg_dict):
+                    for arg in arg_dict:
+                        # We don't want to clean queries or UDF code, as they can legally include
+                        # > and <. Bleach was a little overzealous, as it was replacing things like &.
+                        if isinstance(arg_dict[arg], string_types):
+                            arg_dict[arg] = re.sub(SCRIPT_REGEX, "", arg_dict[arg], flags=re.M | re.I)
+                        elif isinstance(arg_dict[arg], dict):
+                            clean_args(arg_dict[arg])
+
+                clean_args(processed_kwargs)
+                return await function(**processed_kwargs)
+            except:
+                print(traceback.print_exc(file=sys.stderr))
+                raise
 
         wrapper.rpc_method = True  # Set a flag that we can check for in the json_rpc handler
         wrapper.required_scope = required_scope
@@ -180,11 +182,10 @@ def rpc_method(required_scope=None, default_error=None, kwarg_transformation=ide
     return real_decorator
 
 
-@gen.coroutine
-def call_as_coroutine(function, default_error, **kwargs):
+async def call_as_coroutine(function, default_error, **kwargs):
     try:
-        if gen.is_coroutine_function(function):
-            result = yield function(**kwargs)
+        if asyncio.iscoroutinefunction(function):
+            result = await function(**kwargs)
         else:
             # If it's not a coroutine, we need to make it one with run_in_executor
             def function_with_error_print(**kwargs):
@@ -213,26 +214,23 @@ def call_as_coroutine(function, default_error, **kwargs):
                 else:
                     return rval
 
-            result = yield IOLoop.current().run_in_executor(
+            result = await asyncio.get_event_loop().run_in_executor(
                 None, functools.partial(function_with_error_print, **kwargs)
             )
-
-        raise gen.Return((result, None))
+        return result, None
     except RPCError as e:
-        raise gen.Return((None, e.json_error()))
+        return None, e.json_error()
     except NotImplementedError:
-        raise gen.Return((None, rpc_error('Not implemented', code=-32601)))
+        return None, rpc_error('Not implemented', code=-32601)
     except Warning as w:
         logger.warning(str(w))
-        raise gen.Return((None, rpc_error(str(w), code=WARNING_CODE)))
-    except gen.Return:
-        raise
+        return None, rpc_error(str(w), code=WARNING_CODE)
     except:
         traceback.print_exc(file=sys.stderr)
         if default_error is None:
-            raise gen.Return((None, rpc_error('Unexpected error')))
+            return None, rpc_error('Unexpected error')
         else:
-            raise gen.Return((None, rpc_error(default_error)))
+            return None, rpc_error(default_error)
 
 
 def apply_sort(data, sort_keys):
