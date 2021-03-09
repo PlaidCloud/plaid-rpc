@@ -63,7 +63,8 @@ def get(token, uri=None, verify_ssl=None, proxy_url=None, proxy_user=None, proxy
     )
 
 
-def http_json_rpc(token=None, uri=None, verify_ssl=None, json_data=None, workspace=None, proxies=None, fire_and_forget=False):
+def http_json_rpc(token=None, uri=None, verify_ssl=None, json_data=None, workspace=None, proxies=None,
+                  fire_and_forget=False, check_allow_transmit=None):
     """
     Sends a json_rpc request over http.
 
@@ -77,6 +78,7 @@ def http_json_rpc(token=None, uri=None, verify_ssl=None, json_data=None, workspa
         workspace (int): workspace to connect to. If None, let the server connect to the default workspace for your user or token
         proxies (dict): Dictionary mapping protocol or protocol and hostname to the URL of the proxy.
         fire_and_forget (bool,optional): return from the method after the request is sent (not wait for response)
+        check_allow_transmit (callable, optional): For use in retry, callable method to see if retries are still valid to send
     """
     def auth_header():
         if workspace:
@@ -106,7 +108,7 @@ def http_json_rpc(token=None, uri=None, verify_ssl=None, json_data=None, workspa
         return requests.sessions.Session()
 
     with get_session() as session:
-        retry = Retry(connect=5, backoff_factor=0.5, status_forcelist=[500, 502, 504], method_whitelist=['POST'])
+        retry = RPCRetry(check_allow_transmit=check_allow_transmit)
         adapter = HTTPAdapter(max_retries=retry)
         session.mount('http://', adapter)
         session.mount('https://', adapter)
@@ -146,6 +148,40 @@ def http_json_rpc(token=None, uri=None, verify_ssl=None, json_data=None, workspa
                 raise
 
 
+class RPCRetry(Retry):
+    def __init__(self, *args, check_allow_transmit=None, **kwargs):
+        """
+
+        Args:
+            check_allow_transmit (callable, optional): Method to call to check if retries are still to be made
+                This can be used to prevent retry of RPC methods once a workflow has been cancelled and the RPC fails
+        """
+        kwargs.update(dict(
+            method_whitelist=['POST'],
+            status_forcelist=[500, 502, 504],
+            backoff_factor=0.1,
+        ))
+        if 'connect' not in kwargs:
+            kwargs['connect'] = 5
+        super(RPCRetry, self).__init__(*args, **kwargs)
+        self.__check_allow_transmit = check_allow_transmit
+
+    def new(self, **kw):
+        kw.update(dict(check_allow_transmit=self.__check_allow_transmit))
+        return super(RPCRetry, self).new(**kw)
+
+    @property
+    def allow_transmit(self):
+        if self.__check_allow_transmit:
+            return self.__check_allow_transmit()
+        return True
+
+    def increment(self, *args, **kwargs):
+        if not self.allow_transmit:
+            raise Exception('No more retries, RPC method has been cancelled')
+        return super(RPCRetry, self).increment(*args, **kwargs)
+
+
 class SimpleRPC(PlainRPCCommon):
     """Call remote rpc methods with a dot based interface, almost as if they
     were simply functions in modules.
@@ -168,6 +204,7 @@ class SimpleRPC(PlainRPCCommon):
                 workspace=workspace,
                 proxies=proxies,
                 fire_and_forget=fire_and_forget,
+                check_allow_transmit=check_allow_transmit
             )
             if response:
                 if isinstance(response, str):
