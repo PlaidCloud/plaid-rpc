@@ -33,7 +33,7 @@ podTemplate(label: 'plaid-rpc',
         if (!params.skip_lint) {
           sh """
             lint --target-dir=$params.target_lint_dir --branch=$branch --full-lint=$params.full_lint
-            pylint
+            pytest
           """
 
           if (branch == 'master') {
