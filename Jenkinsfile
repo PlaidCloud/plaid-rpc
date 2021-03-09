@@ -33,6 +33,7 @@ podTemplate(label: 'plaid-rpc',
         if (!params.skip_lint) {
           sh """
             lint --target-dir=$params.target_lint_dir --branch=$branch --full-lint=$params.full_lint
+            pylint
           """
 
           if (branch == 'master') {
@@ -40,6 +41,9 @@ podTemplate(label: 'plaid-rpc',
           } else {
             recordIssues tool: pyLint(pattern: 'pylint.log'), qualityGates: [[threshold: 1, type: 'TOTAL_HIGH', unstable: true]]
           }
+
+          junit 'pytestresult.xml'
+          cobertura coberturaReportFile: 'coverage.xml', onlyStable: false, failUnhealthy:false, failUnstable: false, failNoReports: false
 
           // Check licenses on all python packages.
           license_errors = sh (
