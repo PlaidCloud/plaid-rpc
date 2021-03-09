@@ -8,13 +8,11 @@ import json
 import logging
 
 from toolz.dicttoolz import merge
-from tornado import gen
-from six.moves import map
 
 from plaidcloud.rpc.remote.rpc_common import call_as_coroutine
 
 __author__ = "Paul Morel"
-__copyright__ = "© Copyright 2017-2019, Tartan Solutions, Inc"
+__copyright__ = "© Copyright 2017-2021, Tartan Solutions, Inc"
 __credits__ = ["Paul Morel"]
 __license__ = "Apache 2.0"
 __maintainer__ = "Paul Morel"
@@ -93,8 +91,7 @@ def get_args_from_callable(callable_object, base_path=BASE_MODULE_PATH, logger=l
     return {k: v for k, v in map(None, required_args, arg_defaults)}
 
 
-@gen.coroutine
-def execute_json_rpc(msg, auth_id, version=1, base_path=BASE_MODULE_PATH, logger=logger, extra_params={}):
+async def execute_json_rpc(msg, auth_id, version=1, base_path=BASE_MODULE_PATH, logger=logger, extra_params=None):
     """
     Executes a JSON RPC request and returns response
 
@@ -112,7 +109,7 @@ def execute_json_rpc(msg, auth_id, version=1, base_path=BASE_MODULE_PATH, logger
 
     Returns:
         JSON-RPC compliant response dict consisting of:
-          - id (int): The requestors unique request id
+          - id (int): The unique request id from the requester
           - ok (bool): The processing state result
           - result: Result of the request
           - error (dict): Error information including code, message, and data
@@ -122,7 +119,7 @@ def execute_json_rpc(msg, auth_id, version=1, base_path=BASE_MODULE_PATH, logger
         rpc_args = json.loads(msg)
     except:
         logger.exception('Request parse error, probably')
-        raise gen.Return({
+        return {
             'id': None,
             'ok': False,
             'error': {
@@ -130,17 +127,16 @@ def execute_json_rpc(msg, auth_id, version=1, base_path=BASE_MODULE_PATH, logger
                 'message': 'Request parse error.  Message must be JSON.',
                 'data': msg
             }
-        })
+        }
     else:
-        result = yield process_rpc(rpc_args, auth_id, version=version, base_path=base_path, logger=logger, extra_params=extra_params)
-        raise gen.Return(result)
+        result = await process_rpc(rpc_args, auth_id, version=version, base_path=base_path, logger=logger, extra_params=extra_params or {})
+        return result
 
 
-@gen.coroutine
-def process_rpc(rpc_args, auth_id, version=1, base_path=BASE_MODULE_PATH, logger=logger, extra_params={}):
+async def process_rpc(rpc_args, auth_id, version=1, base_path=BASE_MODULE_PATH, logger=logger, extra_params={}):
 
     if not isinstance(rpc_args, dict):
-        raise gen.Return({
+        return {
             'id': None,
             'ok': False,
             'error': {
@@ -148,7 +144,7 @@ def process_rpc(rpc_args, auth_id, version=1, base_path=BASE_MODULE_PATH, logger
                 'message': 'Invalid request object format. Must be JSON map. Multiple operations are not supported.',
                 'data': None
             }
-        })
+        }
     else:
         # Args from JSON-RPC standard
         id = rpc_args.get('id')
@@ -157,7 +153,7 @@ def process_rpc(rpc_args, auth_id, version=1, base_path=BASE_MODULE_PATH, logger
         params = rpc_args.get('params', dict())
 
         if jsonrpc not in ('2.0', ):
-            raise gen.Return({
+            return {
                 'id': id,
                 'ok': False,
                 'error': {
@@ -165,10 +161,10 @@ def process_rpc(rpc_args, auth_id, version=1, base_path=BASE_MODULE_PATH, logger
                     'message': 'Invalid API version specified. Only JSON-RPC version 2.0 is supported.',
                     'data': None,
                 }
-            })
+            }
 
         elif method is None:
-            raise gen.Return({
+            return {
                 'id': id,
                 'ok': False,
                 'error': {
@@ -176,10 +172,10 @@ def process_rpc(rpc_args, auth_id, version=1, base_path=BASE_MODULE_PATH, logger
                     'message': 'Invalid method specified',
                     'data': None,
                 }
-            })
+            }
 
         elif not isinstance(params, dict):
-            raise gen.Return({
+            return {
                 'id': id,
                 'ok': False,
                 'error': {
@@ -187,7 +183,7 @@ def process_rpc(rpc_args, auth_id, version=1, base_path=BASE_MODULE_PATH, logger
                     'message': 'Invalid parameter format',
                     'data': None,
                 }
-            })
+            }
 
         # Set these default args.
         # AuthID will come from oAuth2 process most likely
@@ -214,11 +210,11 @@ def process_rpc(rpc_args, auth_id, version=1, base_path=BASE_MODULE_PATH, logger
             )
 
         if method == 'echo':
-            raise gen.Return({
+            return {
                 'id': id,
                 'ok': True,
                 'result': rpc_args
-            })
+            }
         elif method == 'help':
             # Special case.  This should return the doc string of the callable item
             describe_method = params.get('method')
@@ -227,7 +223,7 @@ def process_rpc(rpc_args, auth_id, version=1, base_path=BASE_MODULE_PATH, logger
             except:
                 logger.exception("No module")
                 # No module
-                raise gen.Return({
+                return {
                     'id': id,
                     'ok': False,
                     'error': {
@@ -235,9 +231,9 @@ def process_rpc(rpc_args, auth_id, version=1, base_path=BASE_MODULE_PATH, logger
                         'message': 'Method to describe not found',
                         'data': None
                     }
-                })
+                }
             else:
-                raise gen.Return({
+                return {
                     'id': id,
                     'ok': True,
                     'result': {
@@ -245,7 +241,7 @@ def process_rpc(rpc_args, auth_id, version=1, base_path=BASE_MODULE_PATH, logger
                         'params': get_args_from_callable(callable_object, base_path=base_path, logger=logger),
                         'description': callable_object.__doc__
                     }
-                })
+                }
         else:
             # Actually execute regular rpc method!
             try:
@@ -256,7 +252,7 @@ def process_rpc(rpc_args, auth_id, version=1, base_path=BASE_MODULE_PATH, logger
                 except:
                     logger.exception("No module")
                     # No module
-                    raise gen.Return({
+                    return {
                         'id': id,
                         'ok': False,
                         'error': {
@@ -264,10 +260,10 @@ def process_rpc(rpc_args, auth_id, version=1, base_path=BASE_MODULE_PATH, logger
                             'message': 'Method not found',
                             'data': None
                         }
-                    })
+                    }
                 else:
                     if not check_scopes(method, required_scope, auth_id.get('scopes', {'public'})):
-                        raise gen.Return({
+                        return {
                             'id': id,
                             'ok': False,
                             'error': {
@@ -278,10 +274,10 @@ def process_rpc(rpc_args, auth_id, version=1, base_path=BASE_MODULE_PATH, logger
                                     auth_id.get('scopes', {'public'})
                                 )
                             }
-                        })
+                        }
                     try:
                         logger.info('Start "{}" {}'.format(method, id))
-                        (result, error) = yield call_as_coroutine(callable_object, default_error, **merge(params, extra_params))
+                        (result, error) = await call_as_coroutine(callable_object, default_error, **merge(params, extra_params))
                         logger.info('Complete "{}" {}'.format(method, id))
 
                     except TypeError:
@@ -296,7 +292,7 @@ def process_rpc(rpc_args, auth_id, version=1, base_path=BASE_MODULE_PATH, logger
                         extra_args = [p for p in params if p not in args]
 
                         if missing_args:
-                            raise gen.Return({
+                            return {
                                 'id': id,
                                 'ok': False,
                                 'error': {
@@ -304,9 +300,9 @@ def process_rpc(rpc_args, auth_id, version=1, base_path=BASE_MODULE_PATH, logger
                                     'message': 'Invalid params',
                                     'data': 'Missing required parameter arguments: {}'.format(', '.join(missing_args))
                                 }
-                            })
+                            }
                         elif extra_args:
-                            raise gen.Return({
+                            return {
                                 'id': id,
                                 'ok': False,
                                 'error': {
@@ -314,10 +310,10 @@ def process_rpc(rpc_args, auth_id, version=1, base_path=BASE_MODULE_PATH, logger
                                     'message': 'Invalid params',
                                     'data': 'Extra parameters are not allowed: {}'.format(', '.join(extra_args))
                                 }
-                            })
+                            }
                         else:
                             # Incorrect arguments passed but not sure what the problem really is
-                            raise gen.Return({
+                            return {
                                 'id': id,
                                 'ok': False,
                                 'error': {
@@ -325,12 +321,12 @@ def process_rpc(rpc_args, auth_id, version=1, base_path=BASE_MODULE_PATH, logger
                                     'message': 'Invalid params',
                                     'data': None
                                 }
-                            })
-                    except gen.Return:
-                        raise
+                            }
+                    # except gen.Return:
+                    #     raise
                     except:
                         logger.exception('Unspecified error')
-                        raise gen.Return({
+                        return {
                             'id': id,
                             'ok': False,
                             'error': {
@@ -338,31 +334,31 @@ def process_rpc(rpc_args, auth_id, version=1, base_path=BASE_MODULE_PATH, logger
                                 'message': 'Unspecified error while executing API request',
                                 'data': None
                             }
-                        })
+                        }
                     else:
                         if id is None:
                             # This was a one-way message.  No response should be sent.
                             # per JSON-RPC specifications None id does not get response.
                             logger.debug('Json-RPC call without ID - not responding, as per json-RPC spec.')
-                            raise gen.Return(None)
+                            return None
                         else:
                             if error is not None:
-                                raise gen.Return({
+                                return {
                                     'id': id,
                                     'ok': False,
                                     'error': error
-                                })
+                                }
                             else:
-                                raise gen.Return({
+                                return {
                                     'id': id,
                                     'ok': True,
                                     'result': result
-                                })
-            except gen.Return:
-                raise
+                                }
+            # except gen.Return:
+            #     raise
             except:
                 logger.exception('Unspecified error')
-                raise gen.Return({
+                return {
                     'id': id,
                     'ok': False,
                     'error': {
@@ -370,4 +366,4 @@ def process_rpc(rpc_args, auth_id, version=1, base_path=BASE_MODULE_PATH, logger
                         'message': 'Unspecified error while executing API request',
                         'data': None
                     }
-                })
+                }
