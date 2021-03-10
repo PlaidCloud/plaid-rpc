@@ -254,7 +254,7 @@ def apply_sort(data, sort_keys):
         groups = groupby(itemgetter(key), data)
 
         try:
-            key_sample = next((k for k in group.keys() if k is not None))
+            key_sample = next((k for k in groups.keys() if k is not None))
         except StopIteration:
             key_sample = None
 
