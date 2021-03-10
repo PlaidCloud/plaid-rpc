@@ -32,6 +32,7 @@ podTemplate(label: 'plaid-rpc',
       stage("Run Checks") {
         if (!params.skip_lint) {
           sh """
+            pip install -e .
             lint --target-dir=$params.target_lint_dir --branch=$branch --full-lint=$params.full_lint
             pytest
           """

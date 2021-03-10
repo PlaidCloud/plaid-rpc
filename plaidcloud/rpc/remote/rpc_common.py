@@ -14,7 +14,6 @@ from functools import wraps as _wraps
 from six import string_types
 import numbers
 
-import functools
 from toolz.itertoolz import groupby, concat
 from toolz.functoolz import identity
 
@@ -183,10 +182,10 @@ def rpc_method(required_scope=None, default_error=None, kwarg_transformation=ide
     return real_decorator
 
 
-async def call_as_coroutine(function, default_error, **kwargs):
+def call_as_coroutine(function, default_error, **kwargs):
     try:
         if asyncio.iscoroutinefunction(function):
-            result = await function(**kwargs)
+            result = asyncio.get_event_loop().run_until_complete(function(**kwargs))
         else:
             # If it's not a coroutine, we need to make it one with run_in_executor
             def function_with_error_print(**kwargs):
@@ -215,9 +214,7 @@ async def call_as_coroutine(function, default_error, **kwargs):
                 else:
                     return rval
 
-            result = await asyncio.get_event_loop().run_in_executor(
-                None, functools.partial(function_with_error_print, **kwargs)
-            )
+            result = function_with_error_print(**kwargs)
         return result, None
     except RPCError as e:
         return None, e.json_error()

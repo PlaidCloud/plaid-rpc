@@ -24,12 +24,14 @@ class JsonRpcHandler(tornado.web.RequestHandler):
     """
 
     def initialize(self, *args, **kwargs):
+        super(JsonRpcHandler, self).initialize()
         self.validations = []
         self.logger = logging.getLogger(__name__)
         self.base_path = None
         self.extra_params = {}
 
     async def prepare(self):
+        # await super(JsonRpcHandler, self).prepare()  # Not required if validating by oAuth in plaid
         try:
             await self.validate()
         except Exception as e:

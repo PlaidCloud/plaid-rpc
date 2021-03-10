@@ -4,10 +4,12 @@
 from __future__ import print_function
 
 from __future__ import absolute_import
+import asyncio
 import json
 import logging
 
 from toolz.dicttoolz import merge
+from functools import partial
 
 from plaidcloud.rpc.remote.rpc_common import call_as_coroutine
 
@@ -277,7 +279,9 @@ async def process_rpc(rpc_args, auth_id, version=1, base_path=BASE_MODULE_PATH, 
                         }
                     try:
                         logger.info('Start "{}" {}'.format(method, id))
-                        (result, error) = await call_as_coroutine(callable_object, default_error, **merge(params, extra_params))
+                        result, error = await asyncio.get_event_loop().run_in_executor(
+                            None, partial(call_as_coroutine, callable_object, default_error, **merge(params, extra_params))
+                        )
                         logger.info('Complete "{}" {}'.format(method, id))
 
                     except TypeError:
