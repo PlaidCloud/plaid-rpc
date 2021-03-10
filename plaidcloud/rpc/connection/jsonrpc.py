@@ -38,31 +38,6 @@ if not os.path.exists(download_folder):
     os.makedirs(download_folder)
 
 
-def get(token, uri=None, verify_ssl=None, proxy_url=None, proxy_user=None, proxy_password=None):
-    """Convenience Wrapper for JSON-RPC Connection"""
-
-    warnings.simplefilter('always', DeprecationWarning)
-    warnings.warn(
-        'plaidtools.connection.jsonrpc.get uses a deprecated Websocket connection. Consider using \
-                a plaidtools.connection.jsonrpc.SimpleRPC object instead',
-        DeprecationWarning
-    )
-
-    from plaidtools.remote.jsonrpc import JsonRpc
-    from plaidtools.remote.auth import oauth2_auth
-
-    auth_object = oauth2_auth(token)
-
-    return JsonRpc(
-        auth=auth_object,
-        uri=uri,
-        verify_ssl=verify_ssl,
-        proxy_url=proxy_url,
-        proxy_user=proxy_user,
-        proxy_password=proxy_password,
-    )
-
-
 def http_json_rpc(token=None, uri=None, verify_ssl=None, json_data=None, workspace=None, proxies=None,
                   fire_and_forget=False, check_allow_transmit=None):
     """
