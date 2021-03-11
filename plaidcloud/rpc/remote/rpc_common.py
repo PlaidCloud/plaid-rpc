@@ -12,6 +12,7 @@ import asyncio
 from operator import itemgetter
 from functools import wraps as _wraps
 from six import string_types
+import numbers
 
 from toolz.itertoolz import groupby, concat
 from toolz.functoolz import identity
@@ -248,7 +249,25 @@ def apply_sort(data, sort_keys):
 
         # Sort into groups by this key
         groups = groupby(itemgetter(key), data)
-        sorted_indices = sorted(list(groups.keys()), key=lambda s: s.lower() if s else '', reverse=reverse)
+
+        try:
+            key_sample = next((k for k in groups.keys() if k is not None))
+        except StopIteration:
+            key_sample = None
+
+        if key_sample is None:
+            key_fn = lambda _: True
+        elif isinstance(key_sample, string_types):
+            key_fn = lambda s: s.lower() if s is not None else ''
+        elif isinstance(key_sample, bool):
+            key_fn = bool
+        elif isinstance(key_sample, numbers.Number):
+            key_fn = lambda n: n if n is not None else 0
+        else:
+            # Unknown, so we'll just use ident
+            key_fn = lambda x: x
+
+        sorted_indices = sorted(list(groups.keys()), key=key_fn, reverse=reverse)
 
         # Sort each group by remaining keys, and concat them together in an
         # order sorted by this key.
