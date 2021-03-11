@@ -185,7 +185,16 @@ def rpc_method(required_scope=None, default_error=None, kwarg_transformation=ide
 def call_as_coroutine(function, default_error, **kwargs):
     try:
         if asyncio.iscoroutinefunction(function):
-            result = asyncio.get_event_loop().run_until_complete(function(**kwargs))
+            try:
+                result = asyncio.get_event_loop().run_until_complete(function(**kwargs))
+            except Warning:
+                raise
+            except RPCError:
+                traceback.print_exc(file=sys.stderr)
+                raise
+            except:
+                traceback.print_exc(file=sys.stderr)
+                raise RPCError(message=traceback.format_exc(), code=-32603)
         else:
             # If it's not a coroutine, we need to make it one with run_in_executor
             def function_with_error_print(**kwargs):
