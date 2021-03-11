@@ -53,10 +53,13 @@ class JsonRpcHandler(tornado.web.RequestHandler):
                     self.scopes.add('public')
                 break
         else:
-            self.logger.warning('No validation methods worked, defaulting to "public" scope only!')
-            self.workspace_id = None
-            self.scopes = {'public'}
-            self.user_id = None
+            # self.logger.warning('No validation methods worked, defaulting to "public" scope only!')
+            # self.workspace_id = None
+            # self.scopes = {'public'}
+            # self.user_id = None
+            self.set_header('Content-Type', 'application/json')
+            self.set_status(401)
+            self.finish()
 
     async def _validate_pass(self):
         # Just pass through with no validation.
