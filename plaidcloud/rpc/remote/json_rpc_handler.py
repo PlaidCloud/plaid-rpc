@@ -47,19 +47,24 @@ class JsonRpcHandler(tornado.web.RequestHandler):
         # Validations should return True on success, and False on failure. They
         # should also set workspace_id, scopes, and user_id on success.
 
-        for v in self.validations:
-            if await v():
-                if 'public' not in self.scopes:
-                    self.scopes.add('public')
-                break
-        else:
-            # self.logger.warning('No validation methods worked, defaulting to "public" scope only!')
-            # self.workspace_id = None
-            # self.scopes = {'public'}
-            # self.user_id = None
-            self.set_header('Content-Type', 'application/json')
-            self.set_status(401)
+        if self.request.method == "OPTIONS":
+            # This is likely a CORS preflight request.
+            # Allow it to pass through, but don't let it execute anything.
             self.finish()
+        else:
+            for v in self.validations:
+                if await v():
+                    if 'public' not in self.scopes:
+                        self.scopes.add('public')
+                    break
+            else:
+                # self.logger.warning('No validation methods worked, defaulting to "public" scope only!')
+                # self.workspace_id = None
+                # self.scopes = {'public'}
+                # self.user_id = None
+                self.set_header('Content-Type', 'application/json')
+                self.set_status(401)
+                self.finish()
 
     async def _validate_pass(self):
         # Just pass through with no validation.
