@@ -4,14 +4,12 @@
 from __future__ import print_function
 
 from __future__ import absolute_import
-import asyncio
-import json
+import orjson as json
 import logging
 
 from toolz.dicttoolz import merge
-from functools import partial
-
 from plaidcloud.rpc.remote.rpc_common import call_as_coroutine
+
 
 __author__ = "Paul Morel"
 __copyright__ = "© Copyright 2017-2021, Tartan Solutions, Inc"
@@ -107,7 +105,7 @@ async def execute_json_rpc(msg, auth_id, version=1, base_path=BASE_MODULE_PATH, 
         version (int): API version to use for RPC
         base_path (str): Path to the root of the RPC methods
         logger (logger): A logger to log useful info
-        extra_params (dict): Extra parameters to send
+        extra_params (dict, optional): Extra parameters to send
 
     Returns:
         JSON-RPC compliant response dict consisting of:
@@ -120,7 +118,7 @@ async def execute_json_rpc(msg, auth_id, version=1, base_path=BASE_MODULE_PATH, 
     try:
         rpc_args = json.loads(msg)
     except:
-        logger.exception('Request parse error, probably')
+        logger.exception(f'Request parse error: {msg}')
         return {
             'id': None,
             'ok': False,
@@ -135,7 +133,20 @@ async def execute_json_rpc(msg, auth_id, version=1, base_path=BASE_MODULE_PATH, 
         return result
 
 
-async def process_rpc(rpc_args, auth_id, version=1, base_path=BASE_MODULE_PATH, logger=logger, extra_params={}):
+async def process_rpc(rpc_args, auth_id, version=1, base_path=BASE_MODULE_PATH, logger=logger, extra_params=None):
+    """
+
+    Args:
+        rpc_args (dict): Dictionary of JSON-RPC arguments
+        auth_id (dict): Authentication Information and Identity
+        version (int): API version to use for RPC
+        base_path (str): Path to the root of the RPC methods
+        logger (logger): A logger to log useful info
+        extra_params (dict, optional): Extra parameters to send
+
+    Returns:
+
+    """
 
     if not isinstance(rpc_args, dict):
         return {
@@ -279,9 +290,8 @@ async def process_rpc(rpc_args, auth_id, version=1, base_path=BASE_MODULE_PATH, 
                         }
                     try:
                         logger.info('Start "{}" {}'.format(method, id))
-                        result, error = await asyncio.get_event_loop().run_in_executor(
-                            None, partial(call_as_coroutine, callable_object, default_error, **merge(params, extra_params))
-                        )
+                        extra_params = extra_params or {}
+                        result, error = await call_as_coroutine(callable_object, default_error, **merge(params, extra_params))
                         logger.info('Complete "{}" {}'.format(method, id))
 
                     except TypeError:
