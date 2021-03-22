@@ -11,6 +11,7 @@ import re
 import asyncio
 from operator import itemgetter
 from functools import wraps as _wraps
+from functools import partial
 from six import string_types
 import numbers
 
@@ -182,11 +183,11 @@ def rpc_method(required_scope=None, default_error=None, kwarg_transformation=ide
     return real_decorator
 
 
-def call_as_coroutine(function, default_error, **kwargs):
+async def call_as_coroutine(function, default_error, **kwargs):
     try:
         if asyncio.iscoroutinefunction(function):
             try:
-                result = asyncio.get_event_loop().run_until_complete(function(**kwargs))
+                result = await function(**kwargs)
             except Warning:
                 raise
             except RPCError:
@@ -197,11 +198,16 @@ def call_as_coroutine(function, default_error, **kwargs):
                 raise RPCError(message=traceback.format_exc(), code=-32603)
         else:
             # If it's not a coroutine, we need to make it one with run_in_executor
-            def function_with_error_print(**kwargs):
+            async def function_with_error_print(**kw):
                 # And it's error tracebacks will be unintelligible, so we try to
                 # mitigate it a little here.
                 try:
-                    rval = function(**kwargs)
+                    if getattr(asyncio, 'to_thread', None):
+                        rval = await asyncio.to_thread(function(**kw))
+                    else:
+                        rval = await asyncio.get_event_loop().run_in_executor(
+                            None, partial(function, **kw)
+                        )
                 except Warning:
                     # We don't print a traceback here because this
                     # happens all the time and we don't want to clutter
@@ -223,7 +229,7 @@ def call_as_coroutine(function, default_error, **kwargs):
                 else:
                     return rval
 
-            result = function_with_error_print(**kwargs)
+            result = await function_with_error_print(**kwargs)
         return result, None
     except RPCError as e:
         return None, e.json_error()
