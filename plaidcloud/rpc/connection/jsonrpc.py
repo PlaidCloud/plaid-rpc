@@ -132,7 +132,7 @@ class RPCRetry(Retry):
                 This can be used to prevent retry of RPC methods once a workflow has been cancelled and the RPC fails
         """
         kwargs.update(dict(
-            method_whitelist=['POST'],
+            allowed_methods=['POST'],
             status_forcelist=[500, 502, 504],
             backoff_factor=0.1,
         ))

@@ -17,5 +17,5 @@ sqlalchemy-hana
 toolz
 tornado
 unicodecsv
-urllib3
+urllib3>=1.26.0
 xlrd
