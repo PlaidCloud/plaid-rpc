@@ -55,7 +55,7 @@ setup(
         'toolz==0.10.0',
         'tornado',
         'unicodecsv',
-        'urllib3',
+        'urllib3>=1.26.0',
     ],
     tests_require=test_deps,
     setup_requires=['pytest-runner'],
