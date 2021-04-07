@@ -135,7 +135,7 @@ async def cosubcall(rpc_future):
         raise RPCError(**err)
 
 
-def rpc_method(required_scope=None, default_error=None, kwarg_transformation=identity):
+def rpc_method(required_scope=None, default_error=None, is_streamed=False, kwarg_transformation=identity):
     """Decorator for packaging up Exceptions as json_rpc errors.
 
     Args:
@@ -178,6 +178,7 @@ def rpc_method(required_scope=None, default_error=None, kwarg_transformation=ide
         wrapper.rpc_method = True  # Set a flag that we can check for in the json_rpc handler
         wrapper.required_scope = required_scope
         wrapper.default_error = default_error
+        wrapper.is_streamed = is_streamed
         return wrapper
 
     return real_decorator
@@ -203,7 +204,7 @@ async def call_as_coroutine(function, default_error, **kwargs):
                 # mitigate it a little here.
                 try:
                     if getattr(asyncio, 'to_thread', None):
-                        rval = await asyncio.to_thread(function(**kw))
+                        rval = await asyncio.to_thread(function, **kw)
                     else:
                         rval = await asyncio.get_event_loop().run_in_executor(
                             None, partial(function, **kw)

@@ -2,12 +2,14 @@
 # coding=utf-8
 
 from __future__ import print_function
-
 from __future__ import absolute_import
-import orjson as json
+
+import asyncio
 import logging
 
+import orjson as json
 from toolz.dicttoolz import merge
+
 from plaidcloud.rpc.remote.rpc_common import call_as_coroutine
 
 
@@ -54,12 +56,12 @@ def get_callable_object(method, version, base_path=BASE_MODULE_PATH, logger=logg
         raise nonexist_error
 
     if hasattr(callable, 'rpc_method'):
-        return callable, getattr(callable, 'required_scope', None), getattr(callable, 'default_error', None)
+        return callable, getattr(callable, 'required_scope', None), getattr(callable, 'default_error', None), getattr(callable, 'is_streamed', False)
     else:
         raise nonexist_error
 
 
-def get_args_from_callable(callable_object, base_path=BASE_MODULE_PATH, logger=logger):
+def get_args_from_callable(callable_object):
     """Obtains the arguments and argument defaults for an RPC method
 
     Args:
@@ -91,7 +93,7 @@ def get_args_from_callable(callable_object, base_path=BASE_MODULE_PATH, logger=l
     return {k: v for k, v in map(None, required_args, arg_defaults)}
 
 
-async def execute_json_rpc(msg, auth_id, version=1, base_path=BASE_MODULE_PATH, logger=logger, extra_params=None):
+async def execute_json_rpc(msg, auth_id, version=1, base_path=BASE_MODULE_PATH, logger=logger, extra_params=None, stream_callback=None):
     """
     Executes a JSON RPC request and returns response
 
@@ -114,9 +116,8 @@ async def execute_json_rpc(msg, auth_id, version=1, base_path=BASE_MODULE_PATH, 
           - result: Result of the request
           - error (dict): Error information including code, message, and data
     """
-
     try:
-        rpc_args = json.loads(msg)
+        rpc_args = await asyncio.to_thread(json.loads, msg)
     except:
         logger.exception(f'Request parse error: {msg}')
         return {
@@ -128,25 +129,6 @@ async def execute_json_rpc(msg, auth_id, version=1, base_path=BASE_MODULE_PATH, 
                 'data': msg
             }
         }
-    else:
-        result = await process_rpc(rpc_args, auth_id, version=version, base_path=base_path, logger=logger, extra_params=extra_params or {})
-        return result
-
-
-async def process_rpc(rpc_args, auth_id, version=1, base_path=BASE_MODULE_PATH, logger=logger, extra_params=None):
-    """
-
-    Args:
-        rpc_args (dict): Dictionary of JSON-RPC arguments
-        auth_id (dict): Authentication Information and Identity
-        version (int): API version to use for RPC
-        base_path (str): Path to the root of the RPC methods
-        logger (logger): A logger to log useful info
-        extra_params (dict, optional): Extra parameters to send
-
-    Returns:
-
-    """
 
     if not isinstance(rpc_args, dict):
         return {
@@ -158,226 +140,209 @@ async def process_rpc(rpc_args, auth_id, version=1, base_path=BASE_MODULE_PATH, 
                 'data': None
             }
         }
-    else:
-        # Args from JSON-RPC standard
-        id = rpc_args.get('id')
-        jsonrpc = rpc_args.get('jsonrpc')
-        method = rpc_args.get('method')
-        params = rpc_args.get('params', dict())
+    # Args from JSON-RPC standard
+    id = rpc_args.get('id')
+    jsonrpc = rpc_args.get('jsonrpc')
+    method = rpc_args.get('method')
+    params = rpc_args.get('params', dict())
 
-        if jsonrpc not in ('2.0', ):
+    if jsonrpc not in ('2.0', ):
+        return {
+            'id': id,
+            'ok': False,
+            'error': {
+                'code': -32600,
+                'message': 'Invalid API version specified. Only JSON-RPC version 2.0 is supported.',
+                'data': None,
+            }
+        }
+
+    elif method is None:
+        return {
+            'id': id,
+            'ok': False,
+            'error': {
+                'code': -32600,
+                'message': 'Invalid method specified',
+                'data': None,
+            }
+        }
+
+    elif not isinstance(params, dict):
+        return {
+            'id': id,
+            'ok': False,
+            'error': {
+                'code': -32600,
+                'message': 'Invalid parameter format',
+                'data': None,
+            }
+        }
+
+    # Set these default args.
+    # AuthID will come from oAuth2 process most likely
+    params['auth_id'] = auth_id
+
+    if method == 'echo':
+        return {
+            'id': id,
+            'ok': True,
+            'result': rpc_args
+        }
+    elif method == 'help':
+        # Special case.  This should return the doc string of the callable item
+        describe_method = params.get('method')
+        try:
+            callable_object, _, _, _ = get_callable_object(describe_method, version, base_path=base_path, logger=logger)
+        except:
+            logger.exception("No module")
+            # No module
             return {
                 'id': id,
                 'ok': False,
                 'error': {
-                    'code': -32600,
-                    'message': 'Invalid API version specified. Only JSON-RPC version 2.0 is supported.',
-                    'data': None,
+                    'code': -32601,
+                    'message': 'Method to describe not found',
+                    'data': None
                 }
             }
+        return {
+            'id': id,
+            'ok': True,
+            'result': {
+                'method': describe_method,
+                'params': get_args_from_callable(callable_object),
+                'description': callable_object.__doc__
+            }
+        }
 
-        elif method is None:
+    try:
+        logger.debug('Finding JSON-RPC module and method')
+        callable_object, required_scope, default_error, is_streamed = get_callable_object(method, version, base_path=base_path, logger=logger)
+        logger.debug('Found JSON-RPC module and method')
+    except:
+        logger.exception("No module")
+        # No module
+        return {
+            'id': id,
+            'ok': False,
+            'error': {
+                'code': -32601,
+                'message': 'Method not found',
+                'data': None
+            }
+        }
+
+    def _get_scopes_to_look_for(scope_required):
+        scope_parts = scope_required.split('.')
+        return {
+            scope_required,  # e.g. analyze.project.read
+            # write implies read
+            '.'.join(scope_parts[:2] + ['write']) if scope_parts[-1] == 'read' else scope_required
+        }
+
+    def _check_scopes(method, required_scope, scopes):
+        # Returns True if the method is authorized by the scopes. False if it is not.
+        if method.startswith('identity/me/'):
+            # Special case. identity.me returns info about the caller,
+            # and has more relaxed security.
+            return True
+
+        return (
+            not required_scope
+            or any(s in scopes for s in _get_scopes_to_look_for(required_scope))
+        )
+
+    if not _check_scopes(method, required_scope, auth_id.get('scopes', {'public'})):
+        return {
+            'id': id,
+            'ok': False,
+            'error': {
+                'code': -32601,
+                'message': 'Method is not available due to lack of permission scope',
+                'data': 'Possible scopes: {}, Actual scopes {}'.format(
+                    _get_scopes_to_look_for(required_scope),
+                    auth_id.get('scopes', {'public'})
+                )
+            }
+        }
+    # Actually execute the RPC call now
+    logger.info('Start "{}" {}'.format(method, id))
+    if is_streamed and stream_callback:
+        params['stream_callback'] = stream_callback
+    all_params = merge(params, extra_params or {})
+    try:
+        result, error = await call_as_coroutine(callable_object, default_error, **all_params)
+    except TypeError:
+        logger.exception("Type Error")
+        # Check the callable object and make sure all the required args are present
+        args = get_args_from_callable(callable_object)
+
+        required_args = [a for a in args if args[a] is None]
+        missing_args = [ra for ra in required_args if ra not in all_params]
+
+        # Also check for extra arguments that shouldn't be there
+        extra_args = [p for p in all_params if p not in args]
+
+        if missing_args:
             return {
                 'id': id,
                 'ok': False,
                 'error': {
-                    'code': -32600,
-                    'message': 'Invalid method specified',
-                    'data': None,
+                    'code': -32602,
+                    'message': 'Invalid params',
+                    'data': 'Missing required parameter arguments: {}'.format(', '.join(missing_args))
                 }
             }
-
-        elif not isinstance(params, dict):
+        elif extra_args:
             return {
                 'id': id,
                 'ok': False,
                 'error': {
-                    'code': -32600,
-                    'message': 'Invalid parameter format',
-                    'data': None,
+                    'code': -32602,
+                    'message': 'Invalid params',
+                    'data': 'Extra parameters are not allowed: {}'.format(', '.join(extra_args))
                 }
             }
-
-        # Set these default args.
-        # AuthID will come from oAuth2 process most likely
-        params['auth_id'] = auth_id
-
-        def _get_scopes_to_look_for(scope_required):
-            scope_parts = scope_required.split('.')
-            return {
-                scope_required,  # e.g. analyze.project.read
-                # write implies read
-                '.'.join(scope_parts[:2] + ['write']) if scope_parts[-1] == 'read' else scope_required
-            }
-
-        def check_scopes(method, required_scope, scopes):
-            # Returns True if the method is authorized by the scopes. False if it is not.
-            if method.startswith('identity/me/'):
-                # Special case. identity.me returns info about the caller,
-                # and has more relaxed security.
-                return True
-
-            return (
-                not required_scope
-                or any(s in scopes for s in _get_scopes_to_look_for(required_scope))
-            )
-
-        if method == 'echo':
-            return {
-                'id': id,
-                'ok': True,
-                'result': rpc_args
-            }
-        elif method == 'help':
-            # Special case.  This should return the doc string of the callable item
-            describe_method = params.get('method')
-            try:
-                callable_object, _, _ = get_callable_object(describe_method, version, base_path=base_path, logger=logger)
-            except:
-                logger.exception("No module")
-                # No module
-                return {
-                    'id': id,
-                    'ok': False,
-                    'error': {
-                        'code': -32601,
-                        'message': 'Method to describe not found',
-                        'data': None
-                    }
-                }
-            else:
-                return {
-                    'id': id,
-                    'ok': True,
-                    'result': {
-                        'method': describe_method,
-                        'params': get_args_from_callable(callable_object, base_path=base_path, logger=logger),
-                        'description': callable_object.__doc__
-                    }
-                }
         else:
-            # Actually execute regular rpc method!
-            try:
-                try:
-                    logger.debug('Finding JSON-RPC module and method')
-                    callable_object, required_scope, default_error = get_callable_object(method, version, base_path=base_path, logger=logger)
-                    logger.debug('Found JSON-RPC module and method')
-                except:
-                    logger.exception("No module")
-                    # No module
-                    return {
-                        'id': id,
-                        'ok': False,
-                        'error': {
-                            'code': -32601,
-                            'message': 'Method not found',
-                            'data': None
-                        }
-                    }
-                else:
-                    if not check_scopes(method, required_scope, auth_id.get('scopes', {'public'})):
-                        return {
-                            'id': id,
-                            'ok': False,
-                            'error': {
-                                'code': -32601,
-                                'message': 'Method is not available due to lack of permission scope',
-                                'data': 'Possible scopes: {}, Actual scopes {}'.format(
-                                    _get_scopes_to_look_for(required_scope),
-                                    auth_id.get('scopes', {'public'})
-                                )
-                            }
-                        }
-                    try:
-                        logger.info('Start "{}" {}'.format(method, id))
-                        extra_params = extra_params or {}
-                        result, error = await call_as_coroutine(callable_object, default_error, **merge(params, extra_params))
-                        logger.info('Complete "{}" {}'.format(method, id))
-
-                    except TypeError:
-                        logger.exception("Type Error")
-                        # Check the callable object and make sure all the required args are present
-                        args = get_args_from_callable(callable_object, base_path=base_path, logger=logger)
-
-                        required_args = [a for a in args if args[a] is None]
-                        missing_args = [ra for ra in required_args if ra not in params]
-
-                        # Also check for extra arguments that shouldn't be there
-                        extra_args = [p for p in params if p not in args]
-
-                        if missing_args:
-                            return {
-                                'id': id,
-                                'ok': False,
-                                'error': {
-                                    'code': -32602,
-                                    'message': 'Invalid params',
-                                    'data': 'Missing required parameter arguments: {}'.format(', '.join(missing_args))
-                                }
-                            }
-                        elif extra_args:
-                            return {
-                                'id': id,
-                                'ok': False,
-                                'error': {
-                                    'code': -32602,
-                                    'message': 'Invalid params',
-                                    'data': 'Extra parameters are not allowed: {}'.format(', '.join(extra_args))
-                                }
-                            }
-                        else:
-                            # Incorrect arguments passed but not sure what the problem really is
-                            return {
-                                'id': id,
-                                'ok': False,
-                                'error': {
-                                    'code': -32602,
-                                    'message': 'Invalid params',
-                                    'data': None
-                                }
-                            }
-                    # except gen.Return:
-                    #     raise
-                    except:
-                        logger.exception('Unspecified error')
-                        return {
-                            'id': id,
-                            'ok': False,
-                            'error': {
-                                'code': -32603,
-                                'message': 'Unspecified error while executing API request',
-                                'data': None
-                            }
-                        }
-                    else:
-                        if id is None:
-                            # This was a one-way message.  No response should be sent.
-                            # per JSON-RPC specifications None id does not get response.
-                            logger.debug('Json-RPC call without ID - not responding, as per json-RPC spec.')
-                            return None
-                        else:
-                            if error is not None:
-                                return {
-                                    'id': id,
-                                    'ok': False,
-                                    'error': error
-                                }
-                            else:
-                                return {
-                                    'id': id,
-                                    'ok': True,
-                                    'result': result
-                                }
-            # except gen.Return:
-            #     raise
-            except:
-                logger.exception('Unspecified error')
-                return {
-                    'id': id,
-                    'ok': False,
-                    'error': {
-                        'code': -32603,
-                        'message': 'Unspecified error while executing API request',
-                        'data': None
-                    }
+            # Incorrect arguments passed but not sure what the problem really is
+            return {
+                'id': id,
+                'ok': False,
+                'error': {
+                    'code': -32602,
+                    'message': 'Invalid params',
+                    'data': None
                 }
+            }
+    except:
+        logger.exception('Unspecified error')
+        return {
+            'id': id,
+            'ok': False,
+            'error': {
+                'code': -32603,
+                'message': 'Unspecified error while executing API request',
+                'data': None
+            }
+        }
+    else:
+        if id is None:
+            # This was a one-way message.  No response should be sent.
+            # per JSON-RPC specifications None id does not get response.
+            logger.debug('Json-RPC call without ID - not responding, as per json-RPC spec.')
+            return None
+
+        elif error is not None:
+            return {
+                'id': id,
+                'ok': False,
+                'error': error
+            }
+        return {
+            'id': id,
+            'ok': True,
+            'result': result
+        }
+    finally:
+        logger.info('Finish "{}" {}'.format(method, id))
