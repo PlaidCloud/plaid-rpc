@@ -3,8 +3,8 @@
 from __future__ import absolute_import
 import types
 import logging
-import orjson as json
 
+import orjson as json
 import tornado.web
 
 from plaidcloud.rpc.remote.json_rpc_server import execute_json_rpc
@@ -87,10 +87,14 @@ class JsonRpcHandler(tornado.web.RequestHandler):
         self.set_header('Content-Type', 'application/json')
         self.logger.debug('About to execute RPC call')
 
+        async def stream_callback(data):
+            self.write(bytes(data))
+            await self.flush()
+
         if not self.base_path:
-            result = await execute_json_rpc(msg, auth_id, logger=self.logger, extra_params=self.extra_params)
+            result = await execute_json_rpc(msg, auth_id, logger=self.logger, extra_params=self.extra_params, stream_callback=stream_callback)
         else:
-            result = await execute_json_rpc(msg, auth_id, base_path=self.base_path, logger=self.logger, extra_params=self.extra_params)
+            result = await execute_json_rpc(msg, auth_id, base_path=self.base_path, logger=self.logger, extra_params=self.extra_params, stream_callback=stream_callback)
 
         self.logger.debug('RPC call complete - building response')
         if isinstance(result.get('result'), types.GeneratorType):
