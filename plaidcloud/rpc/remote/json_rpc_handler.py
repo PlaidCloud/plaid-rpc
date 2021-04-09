@@ -29,6 +29,7 @@ class JsonRpcHandler(tornado.web.RequestHandler):
         self.logger = logging.getLogger(__name__)
         self.base_path = None
         self.extra_params = {}
+        self.streamed = False
 
     async def prepare(self):
         # await super(JsonRpcHandler, self).prepare()  # Not required if validating by oAuth in plaid
@@ -88,6 +89,8 @@ class JsonRpcHandler(tornado.web.RequestHandler):
         self.logger.debug('About to execute RPC call')
 
         async def stream_callback(data):
+            if not self.streamed:
+                self.streamed = True
             self.write(bytes(data))
             await self.flush()
 
@@ -97,7 +100,9 @@ class JsonRpcHandler(tornado.web.RequestHandler):
             result = await execute_json_rpc(msg, auth_id, base_path=self.base_path, logger=self.logger, extra_params=self.extra_params, stream_callback=stream_callback)
 
         self.logger.debug('RPC call complete - building response')
-        if isinstance(result.get('result'), types.GeneratorType):
+        if self.streamed:
+            pass
+        elif isinstance(result.get('result'), types.GeneratorType):
             # RPC endpoint returned a generator, so we'll use chunked
             # transfer encoding to stream it (via tornado yield magic).
             for chunk in result.get('result'):
