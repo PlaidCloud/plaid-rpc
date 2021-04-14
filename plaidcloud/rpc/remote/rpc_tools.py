@@ -35,7 +35,7 @@ def get_auth_id(workspace_id, member_id, scopes):
 
 
 def direct_rpc(auth_id, method, params):
-    callable_object, required_scope, default_error, is_streamed = get_callable_object(method, version=1, base_path=BASE_MODULE_PATH, logger=None)
+    callable_object, required_scope, default_error, is_streamed, use_thread = get_callable_object(method, version=1, base_path=BASE_MODULE_PATH, logger=None)
     if asyncio.iscoroutinefunction(callable_object):
         result = asyncio.get_event_loop().run_until_complete(callable_object(auth_id=auth_id, **params))
     else:
@@ -52,9 +52,14 @@ def direct_rpc(auth_id, method, params):
 
 
 async def direct_rpc_async(auth_id, method, params):
-    callable_object, required_scope, default_error, is_streamed = get_callable_object(method, version=1, base_path=BASE_MODULE_PATH, logger=None)
+    callable_object, required_scope, default_error, is_streamed, use_thread = get_callable_object(method, version=1, base_path=BASE_MODULE_PATH, logger=None)
     if asyncio.iscoroutinefunction(callable_object):
-        result = await callable_object(auth_id=auth_id, **params)
+        if use_thread:
+            def run_in_thread():
+                return asyncio.get_event_loop().run_until_complete(callable_object(auth_id=auth_id, **params))
+            result = await asyncio.to_thread(run_in_thread)
+        else:
+            result = await callable_object(auth_id=auth_id, **params)
     else:
         result = callable_object(auth_id=auth_id, **params)
     if isinstance(result, types.GeneratorType):

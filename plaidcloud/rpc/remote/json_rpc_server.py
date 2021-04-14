@@ -56,7 +56,13 @@ def get_callable_object(method, version, base_path=BASE_MODULE_PATH, logger=logg
         raise nonexist_error
 
     if hasattr(callable, 'rpc_method'):
-        return callable, getattr(callable, 'required_scope', None), getattr(callable, 'default_error', None), getattr(callable, 'is_streamed', False)
+        return (
+            callable,
+            getattr(callable, 'required_scope', None),
+            getattr(callable, 'default_error', None),
+            getattr(callable, 'is_streamed', False),
+            getattr(callable, 'use_thread', True)
+        )
     else:
         raise nonexist_error
 
@@ -193,7 +199,7 @@ async def execute_json_rpc(msg, auth_id, version=1, base_path=BASE_MODULE_PATH, 
         # Special case.  This should return the doc string of the callable item
         describe_method = params.get('method')
         try:
-            callable_object, _, _, _ = get_callable_object(describe_method, version, base_path=base_path, logger=logger)
+            callable_object = get_callable_object(describe_method, version, base_path=base_path, logger=logger)[0]
         except:
             logger.exception("No module")
             # No module
@@ -218,7 +224,7 @@ async def execute_json_rpc(msg, auth_id, version=1, base_path=BASE_MODULE_PATH, 
 
     try:
         logger.debug('Finding JSON-RPC module and method')
-        callable_object, required_scope, default_error, is_streamed = get_callable_object(method, version, base_path=base_path, logger=logger)
+        callable_object, required_scope, default_error, is_streamed, use_thread = get_callable_object(method, version, base_path=base_path, logger=logger)
         logger.debug('Found JSON-RPC module and method')
     except:
         logger.exception("No module")
@@ -272,7 +278,7 @@ async def execute_json_rpc(msg, auth_id, version=1, base_path=BASE_MODULE_PATH, 
         params['stream_callback'] = stream_callback
     all_params = merge(params, extra_params or {})
     try:
-        result, error = await call_as_coroutine(callable_object, default_error, **all_params)
+        result, error = await call_as_coroutine(callable_object, default_error, use_thread, **all_params)
     except TypeError:
         logger.exception("Type Error")
         # Check the callable object and make sure all the required args are present
