@@ -100,8 +100,9 @@ class JsonRpcHandler(tornado.web.RequestHandler):
             result = await execute_json_rpc(msg, auth_id, base_path=self.base_path, logger=self.logger, extra_params=self.extra_params, stream_callback=stream_callback)
 
         self.logger.debug('RPC call complete - building response')
-        if self.streamed:
-            pass
+        if self.streamed or 'download_csv' in msg:
+            if not result['ok']:
+                self.send_error()
         elif isinstance(result.get('result'), types.GeneratorType):
             # RPC endpoint returned a generator, so we'll use chunked
             # transfer encoding to stream it (via tornado yield magic).
