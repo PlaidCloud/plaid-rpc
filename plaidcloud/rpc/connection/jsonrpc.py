@@ -83,7 +83,10 @@ def http_json_rpc(token=None, uri=None, verify_ssl=None, json_data=None, workspa
         return requests.sessions.Session()
 
     with get_session() as session:
-        retry = RPCRetry(check_allow_transmit=check_allow_transmit)
+        if streamable():
+            retry = 0
+        else:
+            retry = RPCRetry(check_allow_transmit=check_allow_transmit)
         adapter = HTTPAdapter(max_retries=retry)
         session.mount('http://', adapter)
         session.mount('https://', adapter)
