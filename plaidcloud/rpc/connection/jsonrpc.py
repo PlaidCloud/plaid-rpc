@@ -99,6 +99,7 @@ def http_json_rpc(token=None, uri=None, verify_ssl=None, json_data=None, workspa
                                   allow_redirects=False, stream=True) as data:
                     for chunk in data.iter_content(chunk_size=None):
                         tmp_file.write(chunk)
+                    data.raise_for_status()
             return file_name
         elif fire_and_forget:
             r_future = session.post(uri, headers=headers, data=payload, verify=verify_ssl, proxies=proxies,
