@@ -185,11 +185,11 @@ def rpc_method(required_scope=None, default_error=None, is_streamed=False, use_t
     return real_decorator
 
 
-async def call_as_coroutine(function, default_error, use_thread, **kwargs):
+async def call_as_coroutine(function, default_error, use_thread, is_streamed, **kwargs):
     try:
         if asyncio.iscoroutinefunction(function):
             try:
-                if use_thread:
+                if use_thread and not is_streamed:
                     def run_in_thread():
                         return asyncio.get_event_loop().run_until_complete(function(**kwargs))
 

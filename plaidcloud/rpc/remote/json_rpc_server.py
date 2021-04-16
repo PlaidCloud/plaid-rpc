@@ -278,7 +278,7 @@ async def execute_json_rpc(msg, auth_id, version=1, base_path=BASE_MODULE_PATH, 
         params['stream_callback'] = stream_callback
     all_params = merge(params, extra_params or {})
     try:
-        result, error = await call_as_coroutine(callable_object, default_error, use_thread, **all_params)
+        result, error = await call_as_coroutine(callable_object, default_error, use_thread, is_streamed, **all_params)
     except TypeError:
         logger.exception("Type Error")
         # Check the callable object and make sure all the required args are present
