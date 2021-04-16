@@ -94,7 +94,7 @@ def http_json_rpc(token=None, uri=None, verify_ssl=None, json_data=None, workspa
         if streamable():
             handle, file_name = tempfile.mkstemp(dir=download_folder, prefix="download_", suffix=".tmp")
             os.close(handle)  # Can't control the access mode, so close this one and open another.
-            with open(file_name, 'wb', buffering=1) as tmp_file:
+            with open(file_name, 'wb') as tmp_file:
                 with session.post(uri, headers=headers, data=payload, verify=verify_ssl, proxies=proxies,
                                   allow_redirects=False, stream=True) as data:
                     for chunk in data.iter_content(chunk_size=None):
