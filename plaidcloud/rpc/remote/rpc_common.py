@@ -135,11 +135,19 @@ async def cosubcall(rpc_future):
         raise RPCError(**err)
 
 
-def rpc_method(required_scope=None, default_error=None, is_streamed=False, use_thread=True, kwarg_transformation=identity):
+def rpc_method(required_scope=None, default_error=None, is_streamed=False, use_thread=False, kwarg_transformation=identity):
     """Decorator for packaging up Exceptions as json_rpc errors.
 
+    Notes:
+        If use_thread is set to True and using asyncio, then a event loop policy must be used to create an event
+        loop in *every* thread.
+
     Args:
-        default_error: The error message to log, in the case of an error.
+        required_scope (str): The scope required to execute the RPC method
+        default_error (str): The error message to log, in the case of an error.
+        is_streamed (bool): Is the result to be streamed
+        use_thread (bool): Is the RPC method to be executed in a separate thread, default False
+        kwarg_transformation (function): Method with which to transform any kwargs
     Returns:
         A decorator function
     Example:
