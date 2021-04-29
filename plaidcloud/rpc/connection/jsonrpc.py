@@ -144,7 +144,7 @@ class RPCRetry(Retry):
             ))
         else:
             kwargs.update(dict(
-                whitelist=['POST'],
+                method_whitelist=['POST'],
                 status_forcelist=[500, 502, 504],
                 backoff_factor=0.1,
             ))
