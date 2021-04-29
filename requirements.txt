@@ -2,6 +2,7 @@ comtypes;platform_system=="Windows"
 messytables
 minimock
 nose
+packaging
 psycopg2-binary
 pytest
 pytest-cov
@@ -17,5 +18,5 @@ sqlalchemy-hana
 toolz
 tornado
 unicodecsv
-urllib3>=1.26.0
+urllib3
 xlrd

@@ -43,6 +43,7 @@ setup(
     install_requires=[
         'comtypes;platform_system=="Windows"',
         'messytables',
+        'packaging',
         'psycopg2-binary',
         'requests',
         'requests_futures',
@@ -55,7 +56,7 @@ setup(
         'toolz==0.10.0',
         'tornado',
         'unicodecsv',
-        'urllib3>=1.26.0',
+        'urllib3',
     ],
     tests_require=test_deps,
     setup_requires=['pytest-runner'],

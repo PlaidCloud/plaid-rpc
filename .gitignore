@@ -3,3 +3,6 @@ build
 .eggs
 dist
 *.egg-info
+.coverage
+coverage.xml
+pytestresult.xml
