@@ -12,6 +12,7 @@ from requests_futures.sessions import FuturesSession
 from urllib3.util.retry import Retry
 import warnings
 import orjson as json
+from packaging import version
 
 from toolz.dicttoolz import assoc
 
@@ -135,11 +136,18 @@ class RPCRetry(Retry):
             check_allow_transmit (callable, optional): Method to call to check if retries are still to be made
                 This can be used to prevent retry of RPC methods once a workflow has been cancelled and the RPC fails
         """
-        kwargs.update(dict(
-            allowed_methods=['POST'],
-            status_forcelist=[500, 502, 504],
-            backoff_factor=0.1,
-        ))
+        if version.parse(urllib3.__version__) >= version.parse("1.26.0"):
+            kwargs.update(dict(
+                allowed_methods=['POST'],
+                status_forcelist=[500, 502, 504],
+                backoff_factor=0.1,
+            ))
+        else:
+            kwargs.update(dict(
+                method_whitelist=['POST'],
+                status_forcelist=[500, 502, 504],
+                backoff_factor=0.1,
+            ))
         if 'connect' not in kwargs:
             kwargs['connect'] = 5
         super(RPCRetry, self).__init__(*args, **kwargs)
