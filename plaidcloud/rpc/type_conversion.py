@@ -4,6 +4,7 @@ from __future__ import absolute_import
 from sqlalchemy import (
     BIGINT, INTEGER, SMALLINT, TEXT, Boolean, NUMERIC, TIMESTAMP, Interval, Date, Time
 )
+from sqlalchemy.sql.sqltypes import LargeBinary
 
 import messytables
 import six
@@ -46,6 +47,8 @@ _ANALYZE_TYPE = regex_map({
         r'^interval$': 'interval',
         r'^date$': 'date',
         r'^time\b.*': 'time',
+        r'^byte.*': 'largebinary',  # Any byte string goes to large binary
+        r'^largebinary$': 'largebinary',
 })
 
 _PANDAS_DTYPE_FROM_SQL = regex_map({
@@ -63,6 +66,7 @@ _PANDAS_DTYPE_FROM_SQL = regex_map({
     r'^date$': 'datetime64[s]',
     r'^time\b.*': 'datetime64[s]',
     r'^datetime.*': 'datetime64[s]',
+    r'^largebinary$': 'object',
 })
 
 _PYTHON_DATESTRING_FROM_SQLALCHEMY = {
@@ -203,6 +207,8 @@ _sqlalchemy_from_dtype = regex_map({
     r'^file_name$': PlaidUnicode(5000),
     r'^tab_name$': PlaidUnicode(5000),
     r'^last_modified': TIMESTAMP,
+    r'^largebinary': LargeBinary,
+    r'^byte.*': LargeBinary,
 })
 def sqlalchemy_from_dtype(dtype):
     """
