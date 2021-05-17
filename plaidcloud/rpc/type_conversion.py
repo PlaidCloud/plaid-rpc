@@ -46,6 +46,7 @@ _ANALYZE_TYPE = regex_map({
         r'^interval$': 'interval',
         r'^date$': 'date',
         r'^time\b.*': 'time',
+        r'^byte$': 'largebinary',  # Any byte string goes to large binary
 })
 
 _PANDAS_DTYPE_FROM_SQL = regex_map({
@@ -63,6 +64,7 @@ _PANDAS_DTYPE_FROM_SQL = regex_map({
     r'^date$': 'datetime64[s]',
     r'^time\b.*': 'datetime64[s]',
     r'^datetime.*': 'datetime64[s]',
+    r'^largebinary$': 'object',
 })
 
 _PYTHON_DATESTRING_FROM_SQLALCHEMY = {
