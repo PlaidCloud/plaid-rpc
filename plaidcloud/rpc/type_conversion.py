@@ -4,6 +4,7 @@ from __future__ import absolute_import
 from sqlalchemy import (
     BIGINT, INTEGER, SMALLINT, TEXT, Boolean, NUMERIC, TIMESTAMP, Interval, Date, Time
 )
+from sqlalchemy.sql.sqltypes import LargeBinary
 
 import messytables
 import six
@@ -73,6 +74,7 @@ _PANDAS_DTYPE_FROM_SQL = regex_map({
     r'^date$': 'datetime64[s]',
     r'^time\b.*': 'datetime64[s]',
     r'^datetime.*': 'datetime64[s]',
+    r'^largebinary$': 'object',
 })
 
 _PYTHON_DATESTRING_FROM_SQLALCHEMY = {

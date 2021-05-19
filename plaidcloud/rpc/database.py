@@ -228,53 +228,53 @@ def query_and_call(connection, sql_file_obj, callback, callback_args=None,
     query = sql_file_obj.read().rstrip(' \t\r\n;')
     logger.debug("Using query: %r", query)
     ts = time.time()
-    result = connection.execute(query)
-    te = time.time()
-    logger.debug("ResultProxy (cursor) took %.2f sec to be created", te - ts)
-    if include_columns:
-        col_names = [key.upper() for key in result.keys()]
-        callback(col_names, *callback_args, **callback_kwargs)
+    with connection.begin() as conn:
+        result = conn.execute(query)
+        te = time.time()
+        logger.debug("ResultProxy (cursor) took %.2f sec to be created", te - ts)
+        if include_columns:
+            col_names = [key.upper() for key in result.keys()]
+            callback(col_names, *callback_args, **callback_kwargs)
 
-    total_records = 0
-    fetch_limit = 5000
-    fetch_queue = six.moves.queue.Queue(fetch_limit)
-    fetch_failed = threading.Event()
-    ts = time.time()
-    t = threading.Thread(target=_fetch_to_queue,
-                         args=(result, fetch_limit,
-                               fetch_queue, fetch_failed))
-    t.start()
-    read_queue = not fetch_failed.is_set()
-    while read_queue:
-        try:
-            row = fetch_queue.get(block=False)
-        except six.moves.queue.Empty:
-            pass
-        else:
-            total_records += 1
-            if total_records % fetch_limit == 0:
-                logger.debug("Fetched %s records, so far",
-                             "{:,}".format(total_records))
-            if not callback_args:
-                callback_args = ()
+        total_records = 0
+        fetch_limit = 5000
+        fetch_queue = six.moves.queue.Queue(fetch_limit)
+        fetch_failed = threading.Event()
+        ts = time.time()
+        t = threading.Thread(target=_fetch_to_queue,
+                             args=(result, fetch_limit,
+                                   fetch_queue, fetch_failed))
+        t.start()
+        read_queue = not fetch_failed.is_set()
+        while read_queue:
+            try:
+                row = fetch_queue.get(block=False)
+            except six.moves.queue.Empty:
+                pass
+            else:
+                total_records += 1
+                if total_records % fetch_limit == 0:
+                    logger.debug("Fetched %s records, so far",
+                                 "{:,}".format(total_records))
+                if not callback_args:
+                    callback_args = ()
 
-            if not callback_kwargs:
-                callback_kwargs = {}
-            callback(row, *callback_args, **callback_kwargs)
+                if not callback_kwargs:
+                    callback_kwargs = {}
+                callback(row, *callback_args, **callback_kwargs)
 
-        if not t.is_alive():
-            if fetch_queue.empty() or fetch_failed.is_set():
-                # Done or failed
-                read_queue = False
-        else:
-            # Still waiting for a conclusion
-            read_queue = True
+            if not t.is_alive():
+                if fetch_queue.empty() or fetch_failed.is_set():
+                    # Done or failed
+                    read_queue = False
+            else:
+                # Still waiting for a conclusion
+                read_queue = True
 
-    if fetch_failed.is_set():
-        # This would happen if the thread were to die.
-        raise Exception('The fetch was not fully completed.')
+        if fetch_failed.is_set():
+            # This would happen if the thread were to die.
+            raise Exception('The fetch was not fully completed.')
 
-    result.close()
     te = time.time()
     logger.debug("Result fetch took %.2f sec to run", te - ts)
 
