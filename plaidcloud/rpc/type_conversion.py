@@ -49,6 +49,14 @@ _ANALYZE_TYPE = regex_map({
         r'^time\b.*': 'time',
         r'^byte.*': 'largebinary',  # Any byte string goes to large binary
         r'^largebinary$': 'largebinary',
+        r'^xml$': 'text',
+        r'^uuid$': 'text',
+        r'^money$': 'numeric',
+        r'^real$': 'numeric',
+        r'^json$': 'text',
+        r'^cidr$': 'text',
+        r'^inet$': 'text',
+        r'^macaddr$': 'text',
 })
 
 _PANDAS_DTYPE_FROM_SQL = regex_map({
@@ -209,6 +217,14 @@ _sqlalchemy_from_dtype = regex_map({
     r'^last_modified': TIMESTAMP,
     r'^largebinary': LargeBinary,
     r'^byte.*': LargeBinary,
+    r'^xml$': PlaidUnicode(5000),
+    r'^uuid$': PlaidUnicode(36),
+    r'^money$': NUMERIC,
+    r'^real$': NUMERIC,
+    r'^json$': PlaidUnicode(5000),
+    r'^cidr$': PlaidUnicode(100),
+    r'^inet$': PlaidUnicode(100),
+    r'^macaddr$': PlaidUnicode(100),
 })
 def sqlalchemy_from_dtype(dtype):
     """
