@@ -45,6 +45,7 @@ class PlaidDate(TypeDecorator):
     """A type that decorates DateTime, converts to unix time on
     the way out and to datetime.datetime objects on the way in."""
     impl = DateTime  # In schema, you want these datetimes to be stored as integers.
+    cache_ok = True
 
     def process_result_value(self, value, _):
         """Assumes a datetime.datetime"""
@@ -78,6 +79,7 @@ class GUID(TypeDecorator):
 
     """
     impl = CHAR
+    cache_ok = True
 
     def load_dialect_impl(self, dialect):
         return dialect.type_descriptor(TEXT)
@@ -111,6 +113,7 @@ class StartPath(TypeDecorator):
     """
 
     impl = Unicode
+    cache_ok = True
 
     def process_bind_param(self, value, _):
         return self.normalize_startpath(value)
@@ -136,6 +139,7 @@ class PlaidUnicode(TypeDecorator):
         Uses Postgresql's non length-checked string type, otherwise uses Unicode for all other implementations.
     """
     impl = NVARCHAR
+    cache_ok = True
 
     def load_dialect_impl(self, dialect):
         """Loads the dialect implementation
