@@ -193,6 +193,64 @@ def rpc_method(required_scope=None, default_error=None, is_streamed=False, use_t
     return real_decorator
 
 
+def rpc_method_sync(required_scope=None, default_error=None, is_streamed=False, use_thread=False, kwarg_transformation=identity):
+    """Decorator for packaging up Exceptions as json_rpc errors.
+
+    Notes:
+        If use_thread is set to True and using asyncio, then a event loop policy must be used to create an event
+        loop in *every* thread.
+
+    Args:
+        required_scope (str): The scope required to execute the RPC method
+        default_error (str): The error message to log, in the case of an error.
+        is_streamed (bool): Is the result to be streamed
+        use_thread (bool): Is the RPC method to be executed in a separate thread, default False
+        kwarg_transformation (function): Method with which to transform any kwargs
+    Returns:
+        A decorator function
+    Example:
+        @package_error('Exception when retrieving project table information')
+        def tables(auth_id, project_id, id_filter):
+            ...
+            return result
+    """
+    def real_decorator(function):
+        """This is the real decorator, with error_string closed over."""
+
+        # PJM - Adding this decorator so sphinx can read actual method docstring
+        # TODO: currently we can't do any preprocessing on non keyword
+        #  arguments, nor do they ever get passed in, anyway. We might want to
+        #  change that, we might not.
+        @_wraps(function)
+        def wrapper(*args, **kwargs):
+            """This is the wrapper that takes the place of the decorated function, handling errors."""
+            try:
+                processed_kwargs = kwarg_transformation(kwargs)
+                def clean_args(arg_dict):
+                    for arg in arg_dict:
+                        # We don't want to clean queries or UDF code, as they can legally include
+                        # > and <. Bleach was a little overzealous, as it was replacing things like &.
+                        if isinstance(arg_dict[arg], string_types):
+                            arg_dict[arg] = re.sub(SCRIPT_REGEX, "", arg_dict[arg], flags=re.M | re.I)
+                        elif isinstance(arg_dict[arg], dict):
+                            clean_args(arg_dict[arg])
+
+                clean_args(processed_kwargs)
+                return function(**processed_kwargs)
+            except:
+                print(traceback.print_exc(file=sys.stderr))
+                raise
+
+        wrapper.rpc_method = True  # Set a flag that we can check for in the json_rpc handler
+        wrapper.required_scope = required_scope
+        wrapper.default_error = default_error
+        wrapper.is_streamed = is_streamed
+        wrapper.use_thread = use_thread
+        return wrapper
+
+    return real_decorator
+
+
 async def call_as_coroutine(function, default_error, use_thread, is_streamed, **kwargs):
     try:
         if asyncio.iscoroutinefunction(function):
