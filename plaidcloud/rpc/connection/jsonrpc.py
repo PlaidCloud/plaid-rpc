@@ -182,7 +182,7 @@ class SimpleRPC(PlainRPCCommon):
 
         def call_rpc(method_path, params, fire_and_forget=False):
             response = http_json_rpc(
-                token, f"{uri}{method_path}", verify_ssl,
+                token, "/".join(map(lambda x: str(x).rstrip('/').lstrip('/'), [uri, method_path])), verify_ssl,
                 {
                     'jsonrpc': '2.0',
                     'method': method_path,
