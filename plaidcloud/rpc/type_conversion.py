@@ -8,13 +8,12 @@ from sqlalchemy.sql.sqltypes import LargeBinary
 
 import messytables
 import six
-import xlrd
 
 from plaidcloud.rpc.functions import regex_map, RegexMapKeyError
 from plaidcloud.rpc.database import PlaidUnicode
 
 __author__ = 'Paul Morel'
-__copyright__ = 'Copyright 2010-2020, Tartan Solutions, Inc'
+__copyright__ = 'Copyright 2010-2021, Tartan Solutions, Inc'
 __credits__ = ['Paul Morel']
 __license__ = 'Apache 2.0'
 __maintainer__ = 'Paul Morel'
@@ -274,12 +273,3 @@ def type_guess(sample, types=TYPES, strict=True):
         instead of boolean.
     """
     return messytables.type_guess(sample, types=TYPES, strict=strict)
-
-
-def dtype_from_excel(excel_type):
-    return {
-        xlrd.XL_CELL_TEXT: 'text',
-        xlrd.XL_CELL_NUMBER: 'numeric',
-        xlrd.XL_CELL_DATE: 'timestamp',
-        xlrd.XL_CELL_BOOLEAN: 'boolean',
-    }.get(excel_type, 'text')
