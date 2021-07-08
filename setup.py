@@ -53,7 +53,7 @@ setup(
         'sqlalchemy',
         'sqlalchemy-greenplum',
         'sqlalchemy-hana',
-        'toolz==0.10.0',
+        'toolz',
         'tornado',
         'unicodecsv',
         'urllib3',

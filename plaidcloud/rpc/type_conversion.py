@@ -4,15 +4,15 @@ from __future__ import absolute_import
 from sqlalchemy import (
     BIGINT, INTEGER, SMALLINT, TEXT, Boolean, NUMERIC, TIMESTAMP, Interval, Date, Time
 )
+from sqlalchemy.sql.sqltypes import LargeBinary
 
 import messytables
-import xlrd
 
 from plaidcloud.rpc.functions import regex_map, RegexMapKeyError
 from plaidcloud.rpc.database import PlaidUnicode
 
 __author__ = 'Paul Morel'
-__copyright__ = 'Copyright 2010-2020, Tartan Solutions, Inc'
+__copyright__ = 'Copyright 2010-2021, Tartan Solutions, Inc'
 __credits__ = ['Paul Morel']
 __license__ = 'Apache 2.0'
 __maintainer__ = 'Paul Morel'
@@ -46,6 +46,16 @@ _ANALYZE_TYPE = regex_map({
         r'^interval$': 'interval',
         r'^date$': 'date',
         r'^time\b.*': 'time',
+        r'^byte.*': 'largebinary',  # Any byte string goes to large binary
+        r'^largebinary$': 'largebinary',
+        r'^xml$': 'text',
+        r'^uuid$': 'text',
+        r'^money$': 'numeric',
+        r'^real$': 'numeric',
+        r'^json$': 'text',
+        r'^cidr$': 'text',
+        r'^inet$': 'text',
+        r'^macaddr$': 'text',
 })
 
 _PANDAS_DTYPE_FROM_SQL = regex_map({
@@ -64,6 +74,7 @@ _PANDAS_DTYPE_FROM_SQL = regex_map({
     r'^date$': 'datetime64[s]',
     r'^time\b.*': 'datetime64[s]',
     r'^datetime.*': 'datetime64[s]',
+    r'^largebinary$': 'object',
 })
 
 _PYTHON_DATESTRING_FROM_SQLALCHEMY = {
@@ -204,6 +215,16 @@ _sqlalchemy_from_dtype = regex_map({
     r'^file_name$': PlaidUnicode(5000),
     r'^tab_name$': PlaidUnicode(5000),
     r'^last_modified': TIMESTAMP,
+    r'^largebinary': LargeBinary,
+    r'^byte.*': LargeBinary,
+    r'^xml$': PlaidUnicode(5000),
+    r'^uuid$': PlaidUnicode(36),
+    r'^money$': NUMERIC,
+    r'^real$': NUMERIC,
+    r'^json$': PlaidUnicode(5000),
+    r'^cidr$': PlaidUnicode(100),
+    r'^inet$': PlaidUnicode(100),
+    r'^macaddr$': PlaidUnicode(100),
 })
 def sqlalchemy_from_dtype(dtype):
     """
@@ -253,12 +274,3 @@ def type_guess(sample, types=TYPES, strict=True):
         instead of boolean.
     """
     return messytables.type_guess(sample, types=TYPES, strict=strict)
-
-
-def dtype_from_excel(excel_type):
-    return {
-        xlrd.XL_CELL_TEXT: 'text',
-        xlrd.XL_CELL_NUMBER: 'numeric',
-        xlrd.XL_CELL_DATE: 'timestamp',
-        xlrd.XL_CELL_BOOLEAN: 'boolean',
-    }.get(excel_type, 'text')
