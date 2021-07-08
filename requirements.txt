@@ -19,4 +19,3 @@ toolz
 tornado
 unicodecsv
 urllib3
-xlrd
