@@ -7,7 +7,6 @@ from sqlalchemy import (
 from sqlalchemy.sql.sqltypes import LargeBinary
 
 import messytables
-import six
 
 from plaidcloud.rpc.functions import regex_map, RegexMapKeyError
 from plaidcloud.rpc.database import PlaidUnicode
@@ -26,6 +25,7 @@ _ANALYZE_TYPE = regex_map({
         r'^object$': 'text',
         r'^text$': 'text',
         r'^nvarchar(\([0-9]*\))*$': 'text',
+        r'^varchar(\([0-9]*\))*$': 'text',
         r'^string$': 'text',
         r'^int8$': 'smallint',
         r'^tinyint$': 'smallint',
@@ -61,7 +61,8 @@ _ANALYZE_TYPE = regex_map({
 _PANDAS_DTYPE_FROM_SQL = regex_map({
     r'^boolean$': 'bool',
     r'^text$': 'object',
-    r'^nvarchar.*$': 'object' if six.PY3 else 'S1024',
+    r'^nvarchar.*$': 'object',
+    r'^varchar.*$': 'object',
     r'^tinyint$': 'int8',
     r'^smallint$': 'int16',
     r'^integer$': 'Int64',
@@ -122,7 +123,7 @@ def analyze_type(dtype):
     key = str(dtype).lower()
 
     # No f'in idea why timestamp is getting mangled into some type of time field.  Force it!
-    # DO NOT REMOVE THIS HACK until you verify timestamps and times are being handled correctly
+    # DO NOT REMOVE THIS HACK until you verify timestamps and times are being handled correctly 
     if key == 'timestamp':
         return 'timestamp'
     elif key == 'time':
