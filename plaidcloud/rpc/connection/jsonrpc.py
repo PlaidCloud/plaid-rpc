@@ -5,12 +5,12 @@ from __future__ import print_function
 
 import os
 import tempfile
+
 import urllib3
 import requests
 from requests.adapters import HTTPAdapter
 from requests_futures.sessions import FuturesSession
 from urllib3.util.retry import Retry
-import warnings
 import orjson as json
 from packaging import version
 from urllib.parse import urljoin
@@ -98,10 +98,15 @@ def http_json_rpc(token=None, uri=None, verify_ssl=None, json_data=None, workspa
             os.close(handle)  # Can't control the access mode, so close this one and open another.
             with open(file_name, 'wb') as tmp_file:
                 with session.post(uri, headers=headers, data=payload, verify=verify_ssl, proxies=proxies,
-                                  allow_redirects=False, stream=True) as data:
-                    for chunk in data.iter_content(chunk_size=None):
+                                  allow_redirects=False, stream=True) as response:
+                    response.raise_for_status()
+                    try:
+                        result = response.json()
+                        return result
+                    except Exception:  # JSONDecodeError: Should be this, but which library? json or simplejson - depends what is installed
+                        pass
+                    for chunk in response.iter_content(chunk_size=None):
                         tmp_file.write(chunk)
-                    data.raise_for_status()
             return file_name
         elif fire_and_forget:
             r_future = session.post(uri, headers=headers, data=payload, verify=verify_ssl, proxies=proxies,
