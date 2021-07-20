@@ -7,7 +7,6 @@ from __future__ import absolute_import
 import sys
 import traceback
 import operator
-import re
 import asyncio
 from operator import itemgetter
 from functools import wraps as _wraps
@@ -17,6 +16,7 @@ import numbers
 
 from toolz.itertoolz import groupby, concat
 from toolz.functoolz import identity
+import bleach
 
 import logging
 from six.moves import filter
@@ -135,7 +135,7 @@ async def cosubcall(rpc_future):
         raise RPCError(**err)
 
 
-def rpc_method(required_scope=None, default_error=None, is_streamed=False, use_thread=False, kwarg_transformation=identity):
+def rpc_method(required_scope=None, default_error=None, is_streamed=False, use_thread=False, skip_clean=None, kwarg_transformation=identity):
     """Decorator for packaging up Exceptions as json_rpc errors.
 
     Notes:
@@ -147,6 +147,7 @@ def rpc_method(required_scope=None, default_error=None, is_streamed=False, use_t
         default_error (str): The error message to log, in the case of an error.
         is_streamed (bool): Is the result to be streamed
         use_thread (bool): Is the RPC method to be executed in a separate thread, default False
+        skip_clean (list, optional): A list of args for which cleaning can be skipped. Used for e.g. UDF code, query filters,
         kwarg_transformation (function): Method with which to transform any kwargs
     Returns:
         A decorator function
@@ -167,20 +168,26 @@ def rpc_method(required_scope=None, default_error=None, is_streamed=False, use_t
         async def wrapper(**kwargs):
             """This is the wrapper that takes the place of the decorated function, handling errors."""
             try:
+                skip_clean_args = skip_clean or []
                 processed_kwargs = kwarg_transformation(kwargs)
-                def clean_args(arg_dict):
-                    for arg in arg_dict:
-                        # We don't want to clean queries or UDF code, as they can legally include
-                        # > and <. Bleach was a little overzealous, as it was replacing things like &.
-                        if isinstance(arg_dict[arg], string_types):
-                            arg_dict[arg] = re.sub(SCRIPT_REGEX, "", arg_dict[arg], flags=re.M | re.I)
-                        elif isinstance(arg_dict[arg], dict):
-                            clean_args(arg_dict[arg])
 
-                clean_args(processed_kwargs)
+                def clean_arg(arg):
+                    if isinstance(arg, string_types):
+                        return bleach.clean(arg)
+                    elif isinstance(arg, dict):
+                        for dict_arg in arg:
+                            if dict_arg not in skip_clean_args:
+                                arg[dict_arg] = clean_arg(arg[dict_arg])
+                        return arg
+                    elif isinstance(arg, list):
+                        return [clean_arg(list_arg) for list_arg in arg]
+                    else:
+                        return arg
+
+                processed_kwargs = clean_arg(processed_kwargs)
                 return await function(**processed_kwargs)
             except:
-                print(traceback.print_exc(file=sys.stderr))
+                traceback.print_exc(file=sys.stderr)
                 raise
 
         wrapper.rpc_method = True  # Set a flag that we can check for in the json_rpc handler
@@ -188,6 +195,7 @@ def rpc_method(required_scope=None, default_error=None, is_streamed=False, use_t
         wrapper.default_error = default_error
         wrapper.is_streamed = is_streamed
         wrapper.use_thread = use_thread
+        wrapper.skip_clean = skip_clean
         return wrapper
 
     return real_decorator

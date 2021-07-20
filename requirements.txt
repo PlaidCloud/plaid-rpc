@@ -1,3 +1,4 @@
+bleach
 comtypes;platform_system=="Windows"
 messytables
 minimock
