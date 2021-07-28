@@ -8,6 +8,7 @@ import sys
 import traceback
 import operator
 import asyncio
+import html
 from operator import itemgetter
 from functools import wraps as _wraps
 from functools import partial
@@ -168,23 +169,23 @@ def rpc_method(required_scope=None, default_error=None, is_streamed=False, use_t
         async def wrapper(**kwargs):
             """This is the wrapper that takes the place of the decorated function, handling errors."""
             try:
-                skip_clean_args = skip_clean or []
+                # skip_clean_args = skip_clean or []
                 processed_kwargs = kwarg_transformation(kwargs)
 
-                def clean_arg(arg):
-                    if isinstance(arg, string_types):
-                        return bleach.clean(arg)
-                    elif isinstance(arg, dict):
-                        for dict_arg in arg:
-                            if dict_arg not in skip_clean_args:
-                                arg[dict_arg] = clean_arg(arg[dict_arg])
-                        return arg
-                    elif isinstance(arg, list):
-                        return [clean_arg(list_arg) for list_arg in arg]
-                    else:
-                        return arg
-
-                processed_kwargs = clean_arg(processed_kwargs)
+                # def clean_arg(arg):
+                #     if isinstance(arg, string_types):
+                #         return bleach.clean(arg)
+                #     elif isinstance(arg, dict):
+                #         for dict_arg in arg:
+                #             if dict_arg not in skip_clean_args:
+                #                 arg[dict_arg] = clean_arg(arg[dict_arg])
+                #         return arg
+                #     elif isinstance(arg, list):
+                #         return [clean_arg(list_arg) for list_arg in arg]
+                #     else:
+                #         return arg
+                #
+                # processed_kwargs = clean_arg(processed_kwargs)
                 return await function(**processed_kwargs)
             except:
                 traceback.print_exc(file=sys.stderr)
