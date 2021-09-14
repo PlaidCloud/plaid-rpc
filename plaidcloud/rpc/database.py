@@ -47,19 +47,20 @@ class PlaidDate(TypeDecorator):
     impl = DateTime  # In schema, you want these datetimes to be stored as integers.
     cache_ok = True
 
-    def process_result_value(self, value, _):
-        """Assumes a datetime.datetime"""
-        if value is None:
-            return None  # support nullability
-        elif isinstance(value, datetime.datetime):
-            try:
-                return int(time.mktime(value.timetuple()))
-            except ValueError:
-                # TODO: this is in here because time.mktime cannot handle years before 1900 or after 9999.
-                # We should find a better alternative, but for now dates outside 1900-9999 will be treated as None.
-                return None
-        raise ValueError("Can operate only on datetime values. "
-                         "Offending value type: {0}".format(type(value).__name__))
+    # PB Sep 2021 - Disable outward conversion to UNIX timestamp, still allow support of setting values
+    # def process_result_value(self, value, _):
+    #     """Assumes a datetime.datetime"""
+    #     if value is None:
+    #         return None  # support nullability
+    #     elif isinstance(value, datetime.datetime):
+    #         try:
+    #             return int(time.mktime(value.timetuple()))
+    #         except ValueError:
+    #             # TODO: this is in here because time.mktime cannot handle years before 1900 or after 9999.
+    #             # We should find a better alternative, but for now dates outside 1900-9999 will be treated as None.
+    #             return None
+    #     raise ValueError("Can operate only on datetime values. "
+    #                      "Offending value type: {0}".format(type(value).__name__))
 
     def process_bind_param(self, value, _):
         if value is not None:  # support nullability
