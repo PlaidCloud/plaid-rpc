@@ -446,43 +446,42 @@ class PlaidConfig(object):
         return self._step_id
 
 def find_plaid_conf(path=None):
-     """Finds plaid.conf by searching upwards for first plaid.conf it finds"""
-     root = find_workspace_root(path)
-     direct = root.joinpath(CONFIG_NAME)
-     one_down = root.joinpath(CONFIG_DIR, CONFIG_NAME)
-     if direct.exists():
-         return direct
-     elif one_down.exists():
-         return one_down
-     else:
-         raise Exception(
-             f'This should never happen, but neither {str(direct)} nor '
-             f'{str(one_down)} exist.'
-         )
+    """Finds plaid.conf by searching upwards for first plaid.conf it finds"""
+    root = find_workspace_root(path)
+    direct = root.joinpath(CONFIG_NAME)
+    one_down = root.joinpath(CONFIG_DIR, CONFIG_NAME)
+    if direct.exists():
+        return direct
+    elif one_down.exists():
+        return one_down
+    else:
+        raise Exception(
+            f'This should never happen, but neither {str(direct)} nor '
+            f'{str(one_down)} exist.'
+        )
 
 def find_workspace_root(path=None):
-     """Finds the workspace root by searching upwards for first plaid.conf it finds"""
-     if path:
-         path = Path(path).resolve()
-     else:
-         path = Path.cwd()
+    """Finds the workspace root by searching upwards for first plaid.conf it finds"""
+    if path:
+        path = Path(path).resolve()
+    else:
+        path = Path.cwd()
+    def recurse(path):
+        if (
+            path.joinpath(CONFIG_NAME).exists()
+            or path.joinpath(CONFIG_DIR, CONFIG_NAME).exists()
+        ):
+            return path
+        elif path == path.parent:
+            # We've hit the filesystem root
+            raise Exception(
+                f'Could not find {CONFIG_NAME}, starting at {str(path)}, '
+                f'checking sub_folder {CONFIG_DIR}'
+            )
+        else:
+            return recurse(path.parent)
 
-     def recurse(path):
-         if (
-             path.joinpath(CONFIG_NAME).exists()
-             or path.joinpath(CONFIG_DIR, CONFIG_NAME).exists()
-         ):
-             return path
-         elif path == path.parent:
-             # We've hit the filesystem root
-             raise Exception(
-                 f'Could not find {CONFIG_NAME}, starting at {str(path)}, '
-                 f'checking sub_folder {CONFIG_DIR}'
-             )
-         else:
-             return recurse(path.parent)
-
-     return recurse(Path.cwd())
+    return recurse(Path.cwd())
 
 # TARGET_WORKING_DIRECTORY = os.path.abspath(os.path.dirname(__file__))
 # CONFIG_PATH = ('{}/config/'.format(TARGET_WORKING_DIRECTORY))
