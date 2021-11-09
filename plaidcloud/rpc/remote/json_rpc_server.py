@@ -321,6 +321,8 @@ async def execute_json_rpc(msg, auth_id, version=1, base_path=BASE_MODULE_PATH, 
                     'data': None
                 }
             }
+    except asyncio.exceptions.TimeoutError:
+        raise
     except:
         logger.exception('Unspecified error')
         return {
