@@ -223,6 +223,8 @@ async def call_as_coroutine(function, default_error, use_thread, is_streamed, **
             except RPCError:
                 traceback.print_exc(file=sys.stderr)
                 raise
+            except asyncio.exceptions.TimeoutError:
+                raise
             except:
                 traceback.print_exc(file=sys.stderr)
                 raise RPCError(message=traceback.format_exc(), code=-32603)
@@ -268,6 +270,8 @@ async def call_as_coroutine(function, default_error, use_thread, is_streamed, **
     except Warning as w:
         logger.warning(str(w))
         return None, rpc_error(str(w), code=WARNING_CODE)
+    except asyncio.exceptions.TimeoutError:
+        raise
     except:
         traceback.print_exc(file=sys.stderr)
         if default_error is None:
