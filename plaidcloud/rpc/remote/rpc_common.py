@@ -19,10 +19,10 @@ from toolz.itertoolz import groupby, concat
 from toolz.functoolz import identity
 import bleach
 
-import logging
+# import logging
 from six.moves import filter
 
-logger = logging.getLogger(__name__)
+# logger = logging.getLogger(__name__)
 
 WARNING_CODE = -1000
 SCRIPT_REGEX = r'<\s*(\/)?\s*s\s*c\s*r\s*i\s*p\s*t\s*>'  # script tag or closing tag, with any amount of whitespace in between (\s*). Use with re.I flag for case-insensitive.
@@ -202,7 +202,12 @@ def rpc_method(required_scope=None, default_error=None, is_streamed=False, use_t
     return real_decorator
 
 
-async def call_as_coroutine(function, default_error, use_thread, is_streamed, **kwargs):
+async def call_as_coroutine(function, default_error, use_thread, is_streamed, system_user, logger, **kwargs):
+    def _get_error_message(e):
+        if system_user:
+            return traceback.format_exc()
+        else:
+            return f'{"Unexpected error" if not default_error else default_error} - {str(e)}'
     try:
         if asyncio.iscoroutinefunction(function):
             try:
@@ -221,13 +226,13 @@ async def call_as_coroutine(function, default_error, use_thread, is_streamed, **
             except Warning:
                 raise
             except RPCError:
-                traceback.print_exc(file=sys.stderr)
+                logger.debug(traceback.format_exc())
                 raise
             except asyncio.exceptions.TimeoutError:
                 raise
-            except:
-                traceback.print_exc(file=sys.stderr)
-                raise RPCError(message=traceback.format_exc(), code=-32603)
+            except Exception as e:
+                logger.debug(traceback.format_exc())
+                raise RPCError(message=_get_error_message(e), code=-32603)
         else:
             # If it's not a coroutine, we need to make it one with run_in_executor
             async def function_with_error_print(**kw):
@@ -249,15 +254,15 @@ async def call_as_coroutine(function, default_error, use_thread, is_streamed, **
                     # If it's an explicit RPCError, we'll assume that
                     # the other end has formatted it the way it should
                     # be shown.
-                    traceback.print_exc(file=sys.stderr)
+                    logger.debug(traceback.format_exc())
                     raise
-                except:
+                except Exception as e:
                     # If it's an unexpected error, we encode it as an
                     # RPCError with code -32603 so that it can be sent
                     # forward. It includes an entire traceback because
-                    # it is an unexpected error.
-                    traceback.print_exc(file=sys.stderr)
-                    raise RPCError(message=traceback.format_exc(), code=-32603)
+                    # it is an unexpected error (for system_user only)
+                    logger.debug(traceback.format_exc())
+                    raise RPCError(message=_get_error_message(e), code=-32603)
                 else:
                     return rval
 
@@ -272,12 +277,9 @@ async def call_as_coroutine(function, default_error, use_thread, is_streamed, **
         return None, rpc_error(str(w), code=WARNING_CODE)
     except asyncio.exceptions.TimeoutError:
         raise
-    except:
-        traceback.print_exc(file=sys.stderr)
-        if default_error is None:
-            return None, rpc_error('Unexpected error')
-        else:
-            return None, rpc_error(default_error)
+    except Exception as e:
+        logger.exception('Unexpected Error calling an RPC method')
+        return None, rpc_error(_get_error_message(e))
 
 
 def apply_sort(data, sort_keys):
