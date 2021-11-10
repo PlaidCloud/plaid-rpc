@@ -17,6 +17,5 @@ sqlalchemy
 sqlalchemy-greenplum
 sqlalchemy-hana
 toolz
-tornado
 unicodecsv
 urllib3

@@ -17,7 +17,7 @@ from urllib.parse import urljoin
 
 from toolz.dicttoolz import assoc
 
-from plaidcloud.rpc.remote.json_rpc_handler import unsupported_object_json_encoder
+from plaidcloud.rpc.orjson import unsupported_object_json_encoder
 from plaidcloud.rpc.remote.rpc_tools import PlainRPCCommon
 from plaidcloud.rpc.remote.rpc_common import RPCError, WARNING_CODE
 
