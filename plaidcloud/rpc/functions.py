@@ -14,6 +14,8 @@ import sys
 import traceback
 import re
 from six.moves import reduce
+from collections.abc import Iterable, Collection
+from typing import TypeVar, Callable, Union, Any
 
 from toolz.dicttoolz import merge_with
 from functools import reduce
@@ -23,6 +25,9 @@ __credits__ = ['Adams Tower', 'Paul Morel']
 __maintainer__ = 'Adams Tower'
 __copyright__ = '© Copyright 2011-2018 Tartan Solutions, Inc.'
 __license__ = 'Apache 2.0'
+
+T = TypeVar('T')
+
 
 def async_memoize(afunc):
     """Decorator to memoize an async function."""
@@ -39,7 +44,7 @@ def async_memoize(afunc):
     return memoized_afunc
 
 
-def try_except(success, failure):
+def try_except(success: Callable[[], T], failure: Union[T, Callable[[], T]]) -> T:
     """A try except block as a function.
 
     Note:
@@ -84,7 +89,7 @@ def try_except(success, failure):
             return failure
 
 
-def remove_all(string, substrs):
+def remove_all(string: str, substrs: Iterable[str]) -> str:
     """Removes a whole list of substrings from a string, returning the cleaned
     string.
 
@@ -108,7 +113,7 @@ def remove_all(string, substrs):
         'Four years ago'
     """
 
-    def remove1(string, substr):
+    def remove1(string: str, substr: str) -> str:
         return string.replace(substr, '')
 
     return reduce(remove1, substrs, string)
@@ -121,7 +126,9 @@ class RegexMapKeyError(KeyError):
     pass
 
 
-def regex_map(mapping):
+def regex_map(
+    mapping: Union[dict[Union[str, re.Pattern], T], Collection[tuple[Union[str, re.Pattern], T]]]
+) -> Callable[[str], T]:
     '''
     Args:
         mapping(dict or list): The mapping can be a dict, or an association list
@@ -152,7 +159,7 @@ def regex_map(mapping):
         for regex, val in mapping
     ]
 
-    def lookup(key):
+    def lookup(key: str) -> T:
         for regex, val in compiled_mapping:
             if re.match(regex, key):
                 return val
@@ -181,7 +188,7 @@ def map_across_table(fn, rows):
     ]
 
 
-def getchain(dct, keys, default=None):
+def getchain(dct: dict, keys: Iterable, default: Any = None) -> Any:
     """
     Returns:
         The first value for which a key actually exists in dct, otherwise the
@@ -222,7 +229,7 @@ def getchain(dct, keys, default=None):
         return default
 
 
-def deepmerge(*dicts):
+def deepmerge(*dicts: Union[dict, Any]) -> Union[dict, Any]:
     """
     Merge objects recursively with myDef overwriting defaultDef
 
@@ -298,7 +305,7 @@ def deepmerge(*dicts):
         ... }
         True
     """
-    def _deepmerge(dicts):
+    def _deepmerge(dicts: tuple[Union[dict, Any], ...]) -> Union[dict, Any]:
         # merge_with expects a non-variadic function
 
         for maybe_a_dict in reversed(dicts):
