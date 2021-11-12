@@ -12,6 +12,7 @@ import multiprocessing
 import sys
 import traceback
 import re
+import asyncio
 from collections.abc import Iterable, Collection
 from typing import TypeVar, Callable, Union, Any
 from functools import reduce
@@ -40,6 +41,23 @@ def async_memoize(afunc):
         cache[key] = result
         return result
     return memoized_afunc
+
+
+async def gather_with_sem(*futures, concurrent_tasks=3):
+    """Works like asyncio.gather, but uses a semaphore to limit th number of concurrent tasks"""
+    #TODO: would be great if it could actually avoid starting the tasks - I now realize it
+    #      starts up sem_future and then waits, and that might be why I was still seeing warnings
+    #      In one place we were once gathering tasks in batches of five, with separate calls to
+    #      asyncio.gather() for each batch. I don't love that because it waits for all five to
+    #      complete before starting the next batch
+
+    #TODO: maybe we could catch asyncio.exceptions.TimeoutError in here, and reduce concurrent_tasks
+    #      or run in serial in response?
+    sem = asyncio.Semaphore(concurrent_tasks)
+    async def sem_future(future):
+        async with sem:
+            return await future
+    return await asyncio.gather(*[sem_future(future) for future in futures])
 
 
 def try_except(success: Callable[[], T], failure: Union[T, Callable[[], T]]) -> T:
