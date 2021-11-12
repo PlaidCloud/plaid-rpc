@@ -24,6 +24,20 @@ __maintainer__ = 'Adams Tower'
 __copyright__ = '© Copyright 2011-2018 Tartan Solutions, Inc.'
 __license__ = 'Apache 2.0'
 
+def async_memoize(afunc):
+    """Decorator to memoize an async function."""
+    #TODO: switch out for a library rather than own-rolled: https://github.com/aio-libs/async-lru"""
+    #TODO: if we don't, figure out how to type hint this
+    cache: dict = {}
+    async def memoized_afunc(*args, **kwargs):
+        key = (args, frozenset(sorted(kwargs.items())))
+        if key in cache:
+            return cache[key]
+        result = await afunc(*args, **kwargs)
+        cache[key] = result
+        return result
+    return memoized_afunc
+
 
 def try_except(success, failure):
     """A try except block as a function.
