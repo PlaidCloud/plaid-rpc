@@ -8,22 +8,20 @@ functions.
 Note: more basic ones can be found in toolz
 """
 
-from __future__ import absolute_import
 import multiprocessing
 import sys
 import traceback
 import re
-from six.moves import reduce
 from collections.abc import Iterable, Collection
 from typing import TypeVar, Callable, Union, Any
+from functools import reduce
 
 from toolz.dicttoolz import merge_with
-from functools import reduce
 
 __author__ = 'Adams Tower'
 __credits__ = ['Adams Tower', 'Paul Morel']
 __maintainer__ = 'Adams Tower'
-__copyright__ = '© Copyright 2011-2018 Tartan Solutions, Inc.'
+__copyright__ = '© Copyright 2011-2021 Tartan Solutions, Inc.'
 __license__ = 'Apache 2.0'
 
 T = TypeVar('T')
@@ -85,8 +83,7 @@ def try_except(success: Callable[[], T], failure: Union[T, Callable[[], T]]) -> 
     except:
         if callable(failure):
             return failure()
-        else:
-            return failure
+        return failure
 
 
 def remove_all(string: str, substrs: Iterable[str]) -> str:
@@ -123,7 +120,6 @@ class RegexMapKeyError(KeyError):
     '''
     Raised when a regex_map can't find a matching regex for a key.
     '''
-    pass
 
 
 def regex_map(
@@ -136,7 +132,7 @@ def regex_map(
             string. Values can be of any type.
 
     Returns (function):
-        a function that excepts a key, and returns a value the first value for
+        a function that accepts a key, and returns a value the first value for
         which a regex matches its argument.
 
         The first regex to match will be from left to right in an ordered
@@ -163,8 +159,7 @@ def regex_map(
         for regex, val in compiled_mapping:
             if re.match(regex, key):
                 return val
-        else:
-            raise RegexMapKeyError(key)
+        raise RegexMapKeyError(key)
 
     return lookup
 
@@ -202,7 +197,10 @@ def getchain(dct: dict, keys: Iterable, default: Any = None) -> Any:
         default: The value to return if none of the keys are in dct
 
     Notes:
-        getchain(dct, ['foo', 'bar', 'baz'], default='default') == dct.get('foo', dct.get('bar', dct.get('baz', 'default')))
+        (
+            getchain(dct, ['foo', 'bar', 'baz'], default='default')
+            == dct.get('foo', dct.get('bar', dct.get('baz', 'default')))
+        )
     """
 
     # Old Implemtation (has the disadvantage of doing as many lookups as there
@@ -225,8 +223,7 @@ def getchain(dct: dict, keys: Iterable, default: Any = None) -> Any:
     for key in keys:
         if key in dct:
             return dct[key]
-    else:
-        return default
+    return default
 
 
 def deepmerge(*dicts: Union[dict, Any]) -> Union[dict, Any]:
@@ -312,10 +309,9 @@ def deepmerge(*dicts: Union[dict, Any]) -> Union[dict, Any]:
             if not isinstance(maybe_a_dict, dict):
                 # If we've got any non-dicts, the last non-dict wins.
                 return maybe_a_dict
-        else:
-            # Otherwise we want to merge all these dicts, using deepmerge on any
-            # collisions
-            return merge_with(_deepmerge, *dicts)
+        # Otherwise we want to merge all these dicts, using deepmerge on any
+        # collisions
+        return merge_with(_deepmerge, *dicts)
 
     return _deepmerge(dicts)
 
@@ -357,6 +353,7 @@ def flatten(ioi):
 class ForkFailure(Exception):
     def __init__(self, value):
         self.value = value
+        super().__init__()
     def __str__(self):
         return repr(self.value)
 
@@ -409,9 +406,7 @@ def fork_apply(func, args, logger=None):
     curr_proc.daemon=daemon_store
 
     # Return result if success, or log and raise exception if not.
-    if success:
-        return result
-    else:
+    if not success:
         exc_type, traceback_str = result
         if logger:
             if traceback_str:
@@ -419,3 +414,5 @@ def fork_apply(func, args, logger=None):
             else:
                 logger.error("NO TRACEBACK FROM THE GRANDCHILD PROCESS FOR %s", exc_type)
         raise ForkFailure("The grandchild process failed for some reason, see above for traceback.")
+
+    return result
