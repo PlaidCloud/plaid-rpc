@@ -1,8 +1,6 @@
 #!/usr/bin/env python
 # coding=utf-8
 
-from __future__ import absolute_import
-
 import asyncio
 import os
 import types
@@ -13,7 +11,7 @@ from plaidcloud.rpc.remote.json_rpc_server import get_callable_object, BASE_MODU
 
 __author__ = 'Paul Morel'
 __maintainer__ = 'Paul Morel <paul.morel@tartansolutions.com>'
-__copyright__ = '© Copyright 2018-2020, Tartan Solutions, Inc'
+__copyright__ = '© Copyright 2018-2021, Tartan Solutions, Inc'
 __license__ = 'Apache 2.0'
 
 
@@ -34,43 +32,59 @@ def get_auth_id(workspace_id, member_id, scopes):
     }
 
 
-def direct_rpc(auth_id, method, params):
-    callable_object, required_scope, default_error, is_streamed, use_thread = get_callable_object(method, version=1, base_path=BASE_MODULE_PATH, logger=None)
-    if asyncio.iscoroutinefunction(callable_object):
-        result = asyncio.get_event_loop().run_until_complete(callable_object(auth_id=auth_id, **params))
-    else:
-        result = callable_object(auth_id=auth_id, **params)
-    if isinstance(result, types.GeneratorType):
-        download_folder = os.path.join(tempfile.gettempdir(), "plaid/download")
-        handle, file_name = tempfile.mkstemp(dir=download_folder, prefix="download_", suffix=".tmp")
-        os.close(handle)  # Can't control the access mode, so close this one and open another.
-        with open(file_name, 'wb', buffering=1) as tmp_file:
-            for chunk in result:
-                tmp_file.write(chunk)
-        return file_name
-    return result
-
-
-async def direct_rpc_async(auth_id, method, params):
-    callable_object, required_scope, default_error, is_streamed, use_thread = get_callable_object(method, version=1, base_path=BASE_MODULE_PATH, logger=None)
-    if asyncio.iscoroutinefunction(callable_object):
-        if use_thread:
-            def run_in_thread():
-                return asyncio.get_event_loop().run_until_complete(callable_object(auth_id=auth_id, **params))
-            result = await asyncio.to_thread(run_in_thread)
+def direct_rpc(auth_id, method, params, logger=None):
+    callable_object, required_scope, default_error, is_streamed, use_thread = get_callable_object(
+        method, version=1, base_path=BASE_MODULE_PATH, logger=logger
+    )
+    if logger:
+        logger.info(f'Start "{method}"')
+    try:
+        if asyncio.iscoroutinefunction(callable_object):
+            result = asyncio.get_event_loop().run_until_complete(callable_object(auth_id=auth_id, **params))
         else:
-            result = await callable_object(auth_id=auth_id, **params)
-    else:
-        result = callable_object(auth_id=auth_id, **params)
-    if isinstance(result, types.GeneratorType):
-        download_folder = os.path.join(tempfile.gettempdir(), "plaid/download")
-        handle, file_name = tempfile.mkstemp(dir=download_folder, prefix="download_", suffix=".tmp")
-        os.close(handle)  # Can't control the access mode, so close this one and open another.
-        with open(file_name, 'wb', buffering=1) as tmp_file:
-            for chunk in result:
-                tmp_file.write(chunk)
-        return file_name
-    return result
+            result = callable_object(auth_id=auth_id, **params)
+        if isinstance(result, types.GeneratorType):
+            download_folder = os.path.join(tempfile.gettempdir(), "plaid/download")
+            handle, file_name = tempfile.mkstemp(dir=download_folder, prefix="download_", suffix=".tmp")
+            os.close(handle)  # Can't control the access mode, so close this one and open another.
+            with open(file_name, 'wb', buffering=1) as tmp_file:
+                for chunk in result:
+                    tmp_file.write(chunk)
+            return file_name
+        return result
+    finally:
+        if logger:
+            logger.info(f'Finish "{method}"')
+
+
+async def direct_rpc_async(auth_id, method, params, logger=None):
+    callable_object, required_scope, default_error, is_streamed, use_thread = get_callable_object(
+        method, version=1, base_path=BASE_MODULE_PATH, logger=logger
+    )
+    if logger:
+        logger.info(f'Start "{method}"')
+    try:
+        if asyncio.iscoroutinefunction(callable_object):
+            if use_thread:
+                def run_in_thread():
+                    return asyncio.get_event_loop().run_until_complete(callable_object(auth_id=auth_id, **params))
+                result = await asyncio.to_thread(run_in_thread)
+            else:
+                result = await callable_object(auth_id=auth_id, **params)
+        else:
+            result = callable_object(auth_id=auth_id, **params)
+        if isinstance(result, types.GeneratorType):
+            download_folder = os.path.join(tempfile.gettempdir(), "plaid/download")
+            handle, file_name = tempfile.mkstemp(dir=download_folder, prefix="download_", suffix=".tmp")
+            os.close(handle)  # Can't control the access mode, so close this one and open another.
+            with open(file_name, 'wb', buffering=1) as tmp_file:
+                for chunk in result:
+                    tmp_file.write(chunk)
+            return file_name
+        return result
+    finally:
+        if logger:
+            logger.info(f'Finish "{method}"')
 
 
 class PlainRPCCommon(object):
@@ -150,14 +164,14 @@ class DirectRPC(PlainRPCCommon):
     rpc = DirectRPC(auth_id=auth_id)
     scopes = rpc.identity.me.scopes()
     """
-    def __init__(self, workspace_id=None, user_id=None, scopes=None, auth_id=None, use_async=False):
+    def __init__(self, workspace_id=None, user_id=None, scopes=None, auth_id=None, use_async=False, logger=None):
         if not auth_id:
             auth_id = get_auth_id(workspace_id, user_id, scopes)
 
         def call_rpc(method_path, params, fire_and_forget=False):
             # fire_and_forget does nothing here.
             if use_async:
-                return direct_rpc_async(auth_id, method_path, params)
-            return direct_rpc(auth_id, method_path, params)
+                return direct_rpc_async(auth_id, method_path, params, logger)
+            return direct_rpc(auth_id, method_path, params, logger)
 
         super(DirectRPC, self).__init__(call_rpc)
