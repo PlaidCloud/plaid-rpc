@@ -2,6 +2,8 @@
 # coding=utf-8
 
 import requests
+import jwt
+from datetime import datetime
 
 __author__ = 'Paul Morel'
 __copyright__ = 'Copyright 2010-2021, Tartan Solutions, Inc'
@@ -9,6 +11,25 @@ __credits__ = ['Paul Morel']
 __license__ = 'Apache 2.0'
 __maintainer__ = 'Paul Morel'
 __email__ = 'paul.morel@tartansolutions.com'
+
+
+def token_is_expired(token: str) -> bool:
+    """Checks to see if a JWT is expired. Expects the exp field
+    in the JWT body.
+    
+    Args:
+        token (str): The encoded JWT to check
+        
+    Returns:
+        bool: True if the token is expired, else False"""
+    decoded = jwt.decode(token, options={"verify_signature": False})
+    if "exp" in decoded:
+        expires = decoded["exp"]
+        if datetime.now() >= datetime.fromtimestamp(expires):
+            return True
+    else:
+        return False
+
 
 def create_oauth_token(grant_type, client_id, client_secret, scopes='openid', username=None, password=None, uri='https://plaidcloud.com/', realm="PlaidCloud", proxy_settings=None):
     """Attempts to create an Oauth2 auth token using the provided data
