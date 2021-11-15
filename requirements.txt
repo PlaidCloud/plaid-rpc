@@ -5,6 +5,7 @@ minimock
 nose
 packaging
 psycopg2-binary
+pyjwt
 pytest
 pytest-cov
 pyyaml
