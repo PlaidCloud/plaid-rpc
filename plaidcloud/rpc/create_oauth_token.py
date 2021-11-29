@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 # coding=utf-8
 
+from typing import Union
 import requests
 import jwt
 from datetime import datetime
@@ -29,6 +30,38 @@ def token_is_expired(token: str) -> bool:
             return True
     else:
         return False
+
+
+def refresh_token(grant_type: str, client_id: str, refresh_token: str, uri: str="https://plaidcloud.com/", realm: str="PlaidCloud", proxy_settings: Union[dict, None]=None):
+    """Refreshes a token and returns a token response
+    
+    Args:
+        grant_type (str): grant type used to create the refresh token's coresponding auth token
+        client_id (str): ID of the client used to create the token
+        refresh_token (str): The refresh token to use
+        uri (str): Root uri to authenticate against, with trailing slash. Will be appended with keycloak's route
+        realm (str): The realm used to generate the token
+        proxy_settings (dict): Proxy settings to pass to requests
+
+    Returns:
+        dict: Standard auth token response. The most relevant contents are:
+            auth_token (str): A new auth token that can be used to make API calls
+            refresh_token (str): A new refresh token that can be used with this method to get a new token
+    """
+
+    headers = {
+        "Content-Type": "application/x-www-form-urlencoded"
+    },
+    payload = {
+        "grant_type": grant_type,
+        "client_id": client_id,
+        "refresh_token": refresh_token,
+    }
+
+    token_url = f"{uri}auth/realms/{realm}/protocol/openid-connect/token"
+    token_response = requests.post(token_url, headers=headers, json=payload, proxies=proxy_settings)
+    token_response.raise_for_status()
+    return token_response.json()
 
 
 def create_oauth_token(grant_type, client_id, client_secret, scopes='openid', username=None, password=None, uri='https://plaidcloud.com/', realm="PlaidCloud", proxy_settings=None):
@@ -78,12 +111,13 @@ def create_oauth_token(grant_type, client_id, client_secret, scopes='openid', us
             "grant_type": "password",
             "scope": scopes,
             "client_id": client_id,
-            "client_secret": client_secret,
             "username": username,
             "password": password,
         }
+        print(payload)
         token = requests.post(token_url, headers=headers, data=payload, proxies=proxy_settings)
     token.raise_for_status()
+    print(token.text)
     token = token.json()
     return token
 
