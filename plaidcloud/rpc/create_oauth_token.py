@@ -111,13 +111,12 @@ def create_oauth_token(grant_type, client_id, client_secret, scopes='openid', us
             "grant_type": "password",
             "scope": scopes,
             "client_id": client_id,
+            "client_secret": client_secret,
             "username": username,
             "password": password,
         }
-        print(payload)
         token = requests.post(token_url, headers=headers, data=payload, proxies=proxy_settings)
     token.raise_for_status()
-    print(token.text)
     token = token.json()
     return token
 
