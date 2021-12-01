@@ -28,21 +28,6 @@ __license__ = 'Apache 2.0'
 T = TypeVar('T')
 
 
-def async_memoize(afunc):
-    """Decorator to memoize an async function."""
-    #TODO: switch out for a library rather than own-rolled: https://github.com/aio-libs/async-lru"""
-    #TODO: if we don't, figure out how to type hint this
-    cache: dict = {}
-    async def memoized_afunc(*args, **kwargs):
-        key = (args, frozenset(sorted(kwargs.items())))
-        if key in cache:
-            return cache[key]
-        result = await afunc(*args, **kwargs)
-        cache[key] = result
-        return result
-    return memoized_afunc
-
-
 async def gather_with_sem(*futures, concurrent_tasks=3):
     """Works like asyncio.gather, but uses a semaphore to limit th number of concurrent tasks"""
     #TODO: would be great if it could actually avoid starting the tasks - I now realize it
