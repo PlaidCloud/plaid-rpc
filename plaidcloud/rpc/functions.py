@@ -199,14 +199,16 @@ def getchain(dct: dict, keys: Iterable, default: Any = None) -> Any:
                          is the one that will have its value returned.
         default: The value to return if none of the keys are in dct
 
-    Notes:
-        (
-            getchain(dct, ['foo', 'bar', 'baz'], default='default')
-            == dct.get('foo', dct.get('bar', dct.get('baz', 'default')))
-        )
+    Examples:
+        >>> dct = {'bar': 1}
+        >>> (
+        ...     getchain(dct, ['foo', 'bar', 'baz'], default='default')
+        ...     == dct.get('foo', dct.get('bar', dct.get('baz', 'default')))
+        ... )
+        True
     """
 
-    # Old Implemtation (has the disadvantage of doing as many lookups as there
+    # Old Implementation (has the disadvantage of doing as many lookups as there
     # are keys, even if the first key is in the dict):
 
     # if not keys:
@@ -419,3 +421,8 @@ def fork_apply(func, args, logger=None):
         raise ForkFailure("The grandchild process failed for some reason, see above for traceback.")
 
     return result
+
+
+if __name__ == "__main__":
+    import doctest
+    doctest.testmod()
