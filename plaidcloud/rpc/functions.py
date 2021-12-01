@@ -28,7 +28,7 @@ __license__ = 'Apache 2.0'
 T = TypeVar('T')
 
 
-async def gather_with_sem(*futures, concurrent_tasks=3):
+async def gather_with_semaphore(*futures, concurrent_tasks=3):
     """Works like asyncio.gather, but uses a semaphore to limit th number of concurrent tasks"""
     #TODO: would be great if it could actually avoid starting the tasks - I now realize it
     #      starts up sem_future and then waits, and that might be why I was still seeing warnings
