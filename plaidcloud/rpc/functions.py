@@ -8,24 +8,44 @@ functions.
 Note: more basic ones can be found in toolz
 """
 
-from __future__ import absolute_import
 import multiprocessing
 import sys
 import traceback
 import re
-from six.moves import reduce
+import asyncio
+from collections.abc import Iterable, Collection
+from typing import TypeVar, Callable, Union, Any
+from functools import reduce
 
 from toolz.dicttoolz import merge_with
-from functools import reduce
 
 __author__ = 'Adams Tower'
 __credits__ = ['Adams Tower', 'Paul Morel']
 __maintainer__ = 'Adams Tower'
-__copyright__ = '© Copyright 2011-2018 Tartan Solutions, Inc.'
+__copyright__ = '© Copyright 2011-2021 Tartan Solutions, Inc.'
 __license__ = 'Apache 2.0'
 
+T = TypeVar('T')
 
-def try_except(success, failure):
+
+async def gather_with_semaphore(*futures, concurrent_tasks=3):
+    """Works like asyncio.gather, but uses a semaphore to limit th number of concurrent tasks"""
+    #TODO: would be great if it could actually avoid starting the tasks - I now realize it
+    #      starts up sem_future and then waits, and that might be why I was still seeing warnings
+    #      In one place we were once gathering tasks in batches of five, with separate calls to
+    #      asyncio.gather() for each batch. I don't love that because it waits for all five to
+    #      complete before starting the next batch
+
+    #TODO: maybe we could catch asyncio.exceptions.TimeoutError in here, and reduce concurrent_tasks
+    #      or run in serial in response?
+    sem = asyncio.Semaphore(concurrent_tasks)
+    async def sem_future(future):
+        async with sem:
+            return await future
+    return await asyncio.gather(*[sem_future(future) for future in futures])
+
+
+def try_except(success: Callable[[], T], failure: Union[T, Callable[[], T]]) -> T:
     """A try except block as a function.
 
     Note:
@@ -66,11 +86,10 @@ def try_except(success, failure):
     except:
         if callable(failure):
             return failure()
-        else:
-            return failure
+        return failure
 
 
-def remove_all(string, substrs):
+def remove_all(string: str, substrs: Iterable[str]) -> str:
     """Removes a whole list of substrings from a string, returning the cleaned
     string.
 
@@ -94,7 +113,7 @@ def remove_all(string, substrs):
         'Four years ago'
     """
 
-    def remove1(string, substr):
+    def remove1(string: str, substr: str) -> str:
         return string.replace(substr, '')
 
     return reduce(remove1, substrs, string)
@@ -104,10 +123,11 @@ class RegexMapKeyError(KeyError):
     '''
     Raised when a regex_map can't find a matching regex for a key.
     '''
-    pass
 
 
-def regex_map(mapping):
+def regex_map(
+    mapping: Union[dict[Union[str, re.Pattern], T], Collection[tuple[Union[str, re.Pattern], T]]]
+) -> Callable[[str], T]:
     '''
     Args:
         mapping(dict or list): The mapping can be a dict, or an association list
@@ -115,7 +135,7 @@ def regex_map(mapping):
             string. Values can be of any type.
 
     Returns (function):
-        a function that excepts a key, and returns a value the first value for
+        a function that accepts a key, and returns a value the first value for
         which a regex matches its argument.
 
         The first regex to match will be from left to right in an ordered
@@ -138,12 +158,11 @@ def regex_map(mapping):
         for regex, val in mapping
     ]
 
-    def lookup(key):
+    def lookup(key: str) -> T:
         for regex, val in compiled_mapping:
             if re.match(regex, key):
                 return val
-        else:
-            raise RegexMapKeyError(key)
+        raise RegexMapKeyError(key)
 
     return lookup
 
@@ -167,7 +186,7 @@ def map_across_table(fn, rows):
     ]
 
 
-def getchain(dct, keys, default=None):
+def getchain(dct: dict, keys: Iterable, default: Any = None) -> Any:
     """
     Returns:
         The first value for which a key actually exists in dct, otherwise the
@@ -180,11 +199,16 @@ def getchain(dct, keys, default=None):
                          is the one that will have its value returned.
         default: The value to return if none of the keys are in dct
 
-    Notes:
-        getchain(dct, ['foo', 'bar', 'baz'], default='default') == dct.get('foo', dct.get('bar', dct.get('baz', 'default')))
+    Examples:
+        >>> dct = {'bar': 1}
+        >>> (
+        ...     getchain(dct, ['foo', 'bar', 'baz'], default='default')
+        ...     == dct.get('foo', dct.get('bar', dct.get('baz', 'default')))
+        ... )
+        True
     """
 
-    # Old Implemtation (has the disadvantage of doing as many lookups as there
+    # Old Implementation (has the disadvantage of doing as many lookups as there
     # are keys, even if the first key is in the dict):
 
     # if not keys:
@@ -204,11 +228,10 @@ def getchain(dct, keys, default=None):
     for key in keys:
         if key in dct:
             return dct[key]
-    else:
-        return default
+    return default
 
 
-def deepmerge(*dicts):
+def deepmerge(*dicts: Union[dict, Any]) -> Union[dict, Any]:
     """
     Merge objects recursively with myDef overwriting defaultDef
 
@@ -284,17 +307,16 @@ def deepmerge(*dicts):
         ... }
         True
     """
-    def _deepmerge(dicts):
+    def _deepmerge(dicts: tuple[Union[dict, Any], ...]) -> Union[dict, Any]:
         # merge_with expects a non-variadic function
 
         for maybe_a_dict in reversed(dicts):
             if not isinstance(maybe_a_dict, dict):
                 # If we've got any non-dicts, the last non-dict wins.
                 return maybe_a_dict
-        else:
-            # Otherwise we want to merge all these dicts, using deepmerge on any
-            # collisions
-            return merge_with(_deepmerge, *dicts)
+        # Otherwise we want to merge all these dicts, using deepmerge on any
+        # collisions
+        return merge_with(_deepmerge, *dicts)
 
     return _deepmerge(dicts)
 
@@ -336,6 +358,7 @@ def flatten(ioi):
 class ForkFailure(Exception):
     def __init__(self, value):
         self.value = value
+        super().__init__()
     def __str__(self):
         return repr(self.value)
 
@@ -388,9 +411,7 @@ def fork_apply(func, args, logger=None):
     curr_proc.daemon=daemon_store
 
     # Return result if success, or log and raise exception if not.
-    if success:
-        return result
-    else:
+    if not success:
         exc_type, traceback_str = result
         if logger:
             if traceback_str:
@@ -398,3 +419,10 @@ def fork_apply(func, args, logger=None):
             else:
                 logger.error("NO TRACEBACK FROM THE GRANDCHILD PROCESS FOR %s", exc_type)
         raise ForkFailure("The grandchild process failed for some reason, see above for traceback.")
+
+    return result
+
+
+if __name__ == "__main__":
+    import doctest
+    doctest.testmod()
