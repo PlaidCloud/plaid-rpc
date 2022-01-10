@@ -1,28 +1,20 @@
 #!/usr/bin/env python
 # coding=utf-8
 
-from __future__ import print_function
-
-from __future__ import absolute_import
-import sys
+# import sys
 import traceback
 import operator
 import asyncio
-import html
+# import html
 from operator import itemgetter
 from functools import wraps as _wraps
 from functools import partial
-from six import string_types
 import numbers
 
 from toolz.itertoolz import groupby, concat
 from toolz.functoolz import identity
-import bleach
+# import bleach
 
-# import logging
-from six.moves import filter
-
-# logger = logging.getLogger(__name__)
 
 WARNING_CODE = -1000
 SCRIPT_REGEX = r'<\s*(\/)?\s*s\s*c\s*r\s*i\s*p\s*t\s*>'  # script tag or closing tag, with any amount of whitespace in between (\s*). Use with re.I flag for case-insensitive.
@@ -168,28 +160,24 @@ def rpc_method(required_scope=None, default_error=None, is_streamed=False, use_t
         @_wraps(function)
         async def wrapper(**kwargs):
             """This is the wrapper that takes the place of the decorated function, handling errors."""
-            try:
-                # skip_clean_args = skip_clean or []
-                processed_kwargs = kwarg_transformation(kwargs)
+            # skip_clean_args = skip_clean or []
+            processed_kwargs = kwarg_transformation(kwargs)
 
-                # def clean_arg(arg):
-                #     if isinstance(arg, string_types):
-                #         return bleach.clean(arg)
-                #     elif isinstance(arg, dict):
-                #         for dict_arg in arg:
-                #             if dict_arg not in skip_clean_args:
-                #                 arg[dict_arg] = clean_arg(arg[dict_arg])
-                #         return arg
-                #     elif isinstance(arg, list):
-                #         return [clean_arg(list_arg) for list_arg in arg]
-                #     else:
-                #         return arg
-                #
-                # processed_kwargs = clean_arg(processed_kwargs)
-                return await function(**processed_kwargs)
-            except:
-                traceback.print_exc(file=sys.stderr)
-                raise
+            # def clean_arg(arg):
+            #     if isinstance(arg, str):
+            #         return bleach.clean(arg)
+            #     elif isinstance(arg, dict):
+            #         for dict_arg in arg:
+            #             if dict_arg not in skip_clean_args:
+            #                 arg[dict_arg] = clean_arg(arg[dict_arg])
+            #         return arg
+            #     elif isinstance(arg, list):
+            #         return [clean_arg(list_arg) for list_arg in arg]
+            #     else:
+            #         return arg
+            #
+            # processed_kwargs = clean_arg(processed_kwargs)
+            return await function(**processed_kwargs)
 
         wrapper.rpc_method = True  # Set a flag that we can check for in the json_rpc handler
         wrapper.required_scope = required_scope
@@ -290,7 +278,7 @@ def apply_sort(data, sort_keys):
         return data
     else:
         # Parse the first sort_key
-        if isinstance(sort_keys[0], string_types):
+        if isinstance(sort_keys[0], str):
             key = sort_keys
             reverse = False
         else:
@@ -308,7 +296,7 @@ def apply_sort(data, sort_keys):
 
         if key_sample is None:
             key_fn = lambda _: True
-        elif isinstance(key_sample, string_types):
+        elif isinstance(key_sample, str):
             key_fn = lambda s: s.lower() if s is not None else ''
         elif isinstance(key_sample, bool):
             key_fn = bool
