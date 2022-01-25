@@ -191,11 +191,11 @@ def rpc_method(required_scope=None, default_error=None, is_streamed=False, use_t
 
 
 async def call_as_coroutine(function, default_error, use_thread, is_streamed, system_user, logger, **kwargs):
-    def _get_error_message(e):
+    def _get_error_message(exc):
         if system_user:
             return traceback.format_exc()
         else:
-            return f'{"Unexpected error" if not default_error else default_error} - {str(e)}'
+            return f'{"Unexpected error" if not default_error else default_error} - {str(exc)}'
     try:
         if asyncio.iscoroutinefunction(function):
             try:
@@ -218,9 +218,9 @@ async def call_as_coroutine(function, default_error, use_thread, is_streamed, sy
                 raise
             except asyncio.exceptions.TimeoutError:
                 raise
-            except Exception as e:
-                logger.debug(traceback.format_exc())
-                raise RPCError(message=_get_error_message(e), code=-32603)
+            except Exception as coro_exc:
+                logger.exception(f'Unhandled exception in RPC method {function.__name__}')
+                raise RPCError(message=_get_error_message(coro_exc), code=-32603)
         else:
             # If it's not a coroutine, we need to make it one with run_in_executor
             async def function_with_error_print(**kw):
@@ -244,20 +244,20 @@ async def call_as_coroutine(function, default_error, use_thread, is_streamed, sy
                     # be shown.
                     logger.debug(traceback.format_exc())
                     raise
-                except Exception as e:
+                except Exception as sync_exc:
                     # If it's an unexpected error, we encode it as an
                     # RPCError with code -32603 so that it can be sent
                     # forward. It includes an entire traceback because
                     # it is an unexpected error (for system_user only)
-                    logger.debug(traceback.format_exc())
-                    raise RPCError(message=_get_error_message(e), code=-32603)
+                    logger.exception(f'Unhandled exception in RPC method {function.__name__}')
+                    raise RPCError(message=_get_error_message(sync_exc), code=-32603)
                 else:
                     return rval
 
             result = await function_with_error_print(**kwargs)
         return result, None
-    except RPCError as e:
-        return None, e.json_error()
+    except RPCError as r_exc:
+        return None, r_exc.json_error()
     except NotImplementedError:
         return None, rpc_error('Not implemented', code=-32601)
     except Warning as w:
@@ -265,9 +265,9 @@ async def call_as_coroutine(function, default_error, use_thread, is_streamed, sy
         return None, rpc_error(str(w), code=WARNING_CODE)
     except asyncio.exceptions.TimeoutError:
         raise
-    except Exception as e:
+    except Exception as outer_exc:
         logger.exception('Unexpected Error calling an RPC method')
-        return None, rpc_error(_get_error_message(e))
+        return None, rpc_error(_get_error_message(outer_exc))
 
 
 def apply_sort(data, sort_keys):
