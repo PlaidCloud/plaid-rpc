@@ -1,6 +1,6 @@
 bleach
 comtypes;platform_system=="Windows"
-messytables
+messytables@git+https://github.com/PlaidCloud/messytables.git@master#egg=messytables
 minimock
 nose
 packaging
