@@ -268,9 +268,11 @@ TYPES = [
 ]
 
 
-def type_guess(sample, types=TYPES, strict=True):
+def type_guess(sample, types=None, strict=True):
     """ Replacement for messytables.type_guess that allows for plaid-wide fine-tuning.
         The current difference is that columns made of 0 and 1 are integer
         instead of boolean.
     """
-    return messytables.type_guess(sample, types=TYPES, strict=strict)
+    if not types:
+        types = TYPES
+    return messytables.type_guess(sample, types=types, strict=strict)
