@@ -7,6 +7,7 @@
 from __future__ import absolute_import
 
 import os
+from urllib.parse import urlencode
 import yaml
 import orjson as json
 import requests
@@ -14,7 +15,6 @@ import uuid
 from concurrent.futures import ThreadPoolExecutor
 
 import six
-import six.moves.urllib_parse
 from plaidcloud.rpc.connection.jsonrpc import SimpleRPC
 from plaidcloud.rpc.remote import listener
 from plaidcloud.rpc.config import PlaidConfig
@@ -71,7 +71,7 @@ class Connect(SimpleRPC, PlaidConfig):
             'scope': 'analyze document identity',
             'state': state
         }
-        final_token_uri = self.token_uri + '?' + six.moves.urllib_parse.urlencode(token_params)
+        final_token_uri = self.token_uri + '?' + urlencode(token_params)
         executor = ThreadPoolExecutor(max_workers=1)
         future = executor.submit(self.callable_listener.get_auth_code)
 
@@ -91,14 +91,15 @@ class Connect(SimpleRPC, PlaidConfig):
         self.auth_token_from_auth_code(auth_code)
         self.ready()
 
-    def auth_token_from_auth_code(self, authorization_code):
+    def auth_token_from_auth_code(self, authorization_code, client_credentials=False):
         """Exchanges an authorization code for an auth token."""
         post_data = {
-            'grant_type': 'authorization_code',
+            'grant_type': 'code' if client_credentials else 'authorization_code',
             'client_id': str(self.client_id),
             'client_secret': str(self.client_secret),
-            'code': str(authorization_code),
         }
+        if not client_credentials:
+            post_data['code'] = str(authorization_code),
         result = requests.post(self.token_uri, data=post_data)
 
         if result.status_code != requests.codes.get('ok'):
@@ -114,7 +115,11 @@ class Connect(SimpleRPC, PlaidConfig):
     def initialize(self):
         """Connects to PlaidCloud. If need be, this also sends the user to PlaidCloud to request a token"""
 
-        if not self.auth_token:
+        if self.auth_token:
+            self.ready()
+        elif self.grant_type == "client_credentials":
+            self.auth_token_from_auth_code(None, True)
+        else:
             if not self.auth_code:
                 # No code OR token. Run through the whole auth process
                 self.request_oauth_token()
@@ -122,8 +127,6 @@ class Connect(SimpleRPC, PlaidConfig):
                 # We can skip to requesting the token.
                 self.auth_token_from_auth_code(self.auth_code)
                 self.ready()
-        else:
-            self.ready()
 
     def ready(self):
         """Call SimpleRPC __init__ once we have an auth token"""
