@@ -94,7 +94,7 @@ class Connect(SimpleRPC, PlaidConfig):
     def auth_token_from_auth_code(self, authorization_code, client_credentials=False):
         """Exchanges an authorization code for an auth token."""
         post_data = {
-            'grant_type': 'code' if client_credentials else 'authorization_code',
+            'grant_type': 'client_credentials' if client_credentials else 'authorization_code',
             'client_id': str(self.client_id),
             'client_secret': str(self.client_secret),
         }
