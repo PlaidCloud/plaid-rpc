@@ -13,10 +13,10 @@ import logging
 import datetime
 import shlex
 import subprocess
+from urllib.parse import urlparse
 import yaml
 import glob
 import six
-import six.moves
 
 from plaidcloud.rpc.file_helpers import makedirs
 
@@ -247,7 +247,7 @@ class PlaidConfig(object):
                 self._step_id = os.environ['__PLAID_STEP_ID__']
                 self.is_local = False
                 try:
-                    self.hostname = six.moves.urllib_parse.urlparse(self.rpc_uri).netloc
+                    self.hostname = urlparse(self.rpc_uri).netloc
                 except:
                     self.hostname = 'Unknown'
                 logger.debug('Environment is configured, running PlaidCloud UDF on {}'.format(self.hostname))
@@ -305,7 +305,11 @@ class PlaidConfig(object):
             self.client_id = self.config['client_id']
             self.client_secret = self.config['client_secret']
             self.hostname = self.config['hostname']
-            self.token_uri = 'https://{}/oauth/token'.format(self.hostname)
+            self.realm = self.config["realm"]
+            if ".net" in self.hostname:
+                self.token_uri = f'https://plaidcloud.com/auth/realms/{self.realm}/protocol/openid-connect/token'
+            else:
+                self.token_uri = 'https://{}/auth/realms/{}/protocol/openid-connect/token'.format(self.hostname, self.realm)
             self.rpc_uri = 'https://{}/json-rpc/'.format(self.hostname)
 
             self.redirect_uri = self.config.get('redirect_uri', '')
@@ -316,6 +320,7 @@ class PlaidConfig(object):
             self._workflow_id = self.config.get('workflow_id', '')
             self._step_id = self.config.get('step_id', '')
             self.name = self.config.get('name')
+            self.grant_type = self.config.get("grant_type", "code")
 
             # No need for an auth code if we already have a token.
             self.auth_code = self.config.get('auth_code') if not self.auth_token else None
