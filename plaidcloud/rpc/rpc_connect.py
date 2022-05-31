@@ -37,7 +37,7 @@ class Connect(SimpleRPC, PlaidConfig):
         [{'SELECT 1': 1}]
     """
 
-    def __init__(self, config_path=None, callable_listener=listener, auto_initialize=True):
+    def __init__(self, config_path=None, callable_listener=listener, auto_initialize=True, check_allow_transmit=lambda: True):
         """Sets up initial data
 
         Args:
@@ -47,9 +47,16 @@ class Connect(SimpleRPC, PlaidConfig):
                 be run in a separate thread.
             auto_initialize (bool): If True, initialize will automatically be called. If False,
                 it must be called manually
+            allow_transmit (func): Function to be called before making RPC calls to see if the call should actually
+                be made. It must take no args and return a boolean value.
         """
 
         self.callable_listener = callable_listener
+        # CRL 2022 Due to bizarre behavior caused by inheriting from SimpleRPC, we must always pass a function
+        # to check_allow_transmit. Otherwise, when PlainRPCCommon checks for the existence of `self.__check_allow_transmit`,
+        # it will find (and try to call) a `Namespace` object and fail. Not sure when this behavior was introduced, but
+        # ensuring that we pass a function (not None) corrects this behavior.
+        self.allow_transmit_func = check_allow_transmit
         PlaidConfig.__init__(self, config_path=config_path)
         if not self.is_local:
             self.ready()
@@ -130,4 +137,4 @@ class Connect(SimpleRPC, PlaidConfig):
 
     def ready(self):
         """Call SimpleRPC __init__ once we have an auth token"""
-        SimpleRPC.__init__(self, self.auth_token, uri=self.rpc_uri, workspace=self.workspace_id)
+        SimpleRPC.__init__(self, self.auth_token, uri=self.rpc_uri, workspace=self.workspace_id, check_allow_transmit=self.allow_transmit_func)
