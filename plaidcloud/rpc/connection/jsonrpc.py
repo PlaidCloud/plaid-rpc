@@ -59,9 +59,9 @@ def http_json_rpc(token=None, uri=None, verify_ssl=None, json_data=None, workspa
     """
     def auth_header():
         if workspace:
-            return "Bearer_{}_ws{}".format(token, workspace)
+            return "Bearer {}_ws{}".format(token, workspace)
         else:
-            return "Bearer_{}".format(token)
+            return "Bearer {}".format(token)
 
     def streamable():
         if json_data and json_data.get('method') in STREAM_ENDPOINTS:
@@ -187,8 +187,12 @@ class SimpleRPC(PlainRPCCommon):
         verify_ssl = bool(verify_ssl)
 
         def call_rpc(method_path, params, fire_and_forget=False):
+            if callable(token):
+                http_token = token()
+            else:
+                http_token = token
             response = http_json_rpc(
-                token, urljoin(uri, method_path), verify_ssl,
+                http_token, urljoin(uri, method_path), verify_ssl,
                 {
                     'jsonrpc': '2.0',
                     'method': method_path,
