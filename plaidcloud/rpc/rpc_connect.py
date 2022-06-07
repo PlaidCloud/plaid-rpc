@@ -119,13 +119,26 @@ class Connect(SimpleRPC, PlaidConfig):
         with open(self.cfg_path, 'w') as config_file:
             config_file.write(yaml.safe_dump(self.config))
 
+    def get_auth_token(self):
+        post_data = {
+            'grant_type': 'client_credentials',
+            'client_id': str(self.client_id),
+            'client_secret': str(self.client_secret)
+        }
+        result = requests.post(self.token_uri, data=post_data)
+        if result.status_code != requests.codes.get('ok'):
+            raise Exception('Error requesting oauth token from PlaidCloud. Reason: {} ({})'.format(result.reason, result.text))
+
+        return result.json()['access_token']
+
     def initialize(self):
         """Connects to PlaidCloud. If need be, this also sends the user to PlaidCloud to request a token"""
 
         if self.auth_token:
             self.ready()
         elif self.grant_type == "client_credentials":
-            self.auth_token_from_auth_code(None, True)
+            self.auth_token = self.get_auth_token
+            self.ready()
         else:
             if not self.auth_code:
                 # No code OR token. Run through the whole auth process
