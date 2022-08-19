@@ -41,7 +41,7 @@ if not os.path.exists(download_folder):
 
 
 def http_json_rpc(token=None, uri=None, verify_ssl=None, json_data=None, workspace=None, proxies=None,
-                  fire_and_forget=False, check_allow_transmit=None):
+                  fire_and_forget=False, check_allow_transmit=None, retry=True, headers=None):
     """
     Sends a json_rpc request over http.
 
@@ -56,6 +56,8 @@ def http_json_rpc(token=None, uri=None, verify_ssl=None, json_data=None, workspa
         proxies (dict): Dictionary mapping protocol or protocol and hostname to the URL of the proxy.
         fire_and_forget (bool,optional): return from the method after the request is sent (not wait for response)
         check_allow_transmit (callable, optional): For use in retry, callable method to see if retries are still valid to send
+        retry (bool, optional): Whether or not to use retry at all, default True
+        headers (dict, optional): Custom headers to send with the RPC
     """
     def auth_header():
         if workspace:
@@ -68,15 +70,11 @@ def http_json_rpc(token=None, uri=None, verify_ssl=None, json_data=None, workspa
             return True
         return False
 
+    headers = headers or {}
+    headers["Content-Type"] = "application/json"
     if token:
-        headers = {
-            "Authorization": auth_header(),
-            "Content-Type": "application/json",
-        }
-    else:
-        headers = {
-            "Content-Type": "application/json",
-        }
+        headers["Authorization"] = auth_header()
+
     payload = json.dumps(assoc(json_data, 'id', 0), default=unsupported_object_json_encoder, option=json.OPT_NAIVE_UTC | json.OPT_NON_STR_KEYS)
 
     def get_session():
@@ -85,7 +83,7 @@ def http_json_rpc(token=None, uri=None, verify_ssl=None, json_data=None, workspa
         return requests.sessions.Session()
 
     with get_session() as session:
-        if streamable():
+        if streamable() or not retry:
             retry = 0
         else:
             retry = RPCRetry(check_allow_transmit=check_allow_transmit)
@@ -183,7 +181,8 @@ class SimpleRPC(PlainRPCCommon):
     rpc = SimpleRPC(token, uri=uri, verify_ssl=verify_ssl, workspace=workspace)
     scopes = rpc.identity.me.scopes()
     """
-    def __init__(self, token, uri=None, verify_ssl=None, workspace=None, proxies=None, check_allow_transmit=None):
+    def __init__(self, token, uri=None, verify_ssl=None, workspace=None, proxies=None, check_allow_transmit=None,
+                 retry=True, headers=None):
         verify_ssl = bool(verify_ssl)
 
         def call_rpc(method_path, params, fire_and_forget=False):
@@ -201,7 +200,9 @@ class SimpleRPC(PlainRPCCommon):
                 workspace=workspace,
                 proxies=proxies,
                 fire_and_forget=fire_and_forget,
-                check_allow_transmit=check_allow_transmit
+                check_allow_transmit=check_allow_transmit,
+                retry=retry,
+                headers=headers,
             )
             if response:
                 if isinstance(response, str):
