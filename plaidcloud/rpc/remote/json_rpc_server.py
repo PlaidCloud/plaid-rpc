@@ -6,6 +6,7 @@ from __future__ import absolute_import
 
 import asyncio
 import logging
+import pprint
 
 import orjson as json
 from toolz.dicttoolz import merge
@@ -108,7 +109,7 @@ async def execute_json_rpc(msg, auth_id, version=1, base_path=BASE_MODULE_PATH, 
     Required message attributes include id and method.  The params argument is optional.
 
     Args:
-        msg (str): JSON string containing the properly formatted JSON-RPC request
+        msg (str or dict): JSON or JSON string containing the properly formatted JSON-RPC request
         auth_id (dict): Authentication Information and Identity
         version (int): API version to use for RPC
         base_path (str): Path to the root of the RPC methods
@@ -122,19 +123,22 @@ async def execute_json_rpc(msg, auth_id, version=1, base_path=BASE_MODULE_PATH, 
           - result: Result of the request
           - error (dict): Error information including code, message, and data
     """
-    try:
-        rpc_args = await asyncio.to_thread(json.loads, msg)
-    except:
-        logger.exception(f'Request parse error: {msg}')
-        return {
-            'id': None,
-            'ok': False,
-            'error': {
-                'code': -32700,
-                'message': 'Request parse error.  Message must be JSON.',
-                'data': msg
+    if isinstance(msg, dict):
+        rpc_args = msg
+    else:
+        try:
+            rpc_args = await asyncio.to_thread(json.loads, msg)
+        except:
+            logger.exception(f'Request parse error: {msg}')
+            return {
+                'id': None,
+                'ok': False,
+                'error': {
+                    'code': -32700,
+                    'message': 'Request parse error.  Message must be JSON.',
+                    'data': msg
+                }
             }
-        }
 
     if not isinstance(rpc_args, dict):
         return {
@@ -201,7 +205,7 @@ async def execute_json_rpc(msg, auth_id, version=1, base_path=BASE_MODULE_PATH, 
         try:
             callable_object = get_callable_object(describe_method, version, base_path=base_path, logger=logger)[0]
         except:
-            logger.exception("No module")
+            logger.exception("No module \n" + pprint.pformat(rpc_args))
             # No module
             return {
                 'id': id,
@@ -227,7 +231,7 @@ async def execute_json_rpc(msg, auth_id, version=1, base_path=BASE_MODULE_PATH, 
         callable_object, required_scope, default_error, is_streamed, use_thread = get_callable_object(method, version, base_path=base_path, logger=logger)
         logger.debug('Found JSON-RPC module and method')
     except:
-        logger.exception("No module")
+        logger.exception("No module \n" + pprint.pformat(rpc_args))
         # No module
         return {
             'id': id,
@@ -282,7 +286,7 @@ async def execute_json_rpc(msg, auth_id, version=1, base_path=BASE_MODULE_PATH, 
             callable_object, default_error, use_thread, is_streamed, auth_id.get('system_user', False), logger, **all_params
         )
     except TypeError:
-        logger.exception("Type Error")
+        logger.exception("Type Error \n" + pprint.pformat(rpc_args))
         # Check the callable object and make sure all the required args are present
         args = get_args_from_callable(callable_object)
 
@@ -324,9 +328,10 @@ async def execute_json_rpc(msg, auth_id, version=1, base_path=BASE_MODULE_PATH, 
                 }
             }
     except asyncio.exceptions.TimeoutError:
+        logger.exception("Timeout Error \n" + pprint.pformat(rpc_args))
         raise
     except:
-        logger.exception('Unspecified error')
+        logger.exception("Unspecified error \n" + pprint.pformat(rpc_args))
         return {
             'id': id,
             'ok': False,
