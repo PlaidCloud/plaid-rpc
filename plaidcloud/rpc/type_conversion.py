@@ -45,6 +45,7 @@ _ANALYZE_TYPE = regex_map({
         r'^timedelta.*': 'interval',  # This may have to cover all timedeltas
         r'^interval$': 'interval',
         r'^date$': 'date',
+        r'^date\(.*\)$': 'date', # This covers Date('format') from type guessing
         r'^time\b.*': 'time',
         r'^byte.*': 'largebinary',  # Any byte string goes to large binary
         r'^largebinary$': 'largebinary',
