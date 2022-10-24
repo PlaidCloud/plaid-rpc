@@ -49,7 +49,7 @@ _ANALYZE_TYPE = regex_map({
         r'^date\(.*\)$': 'date', # This covers Date('format') from type guessing
         r'^time\b.*': 'time',
         r'^byte.*': 'largebinary',  # Any byte string goes to large binary
-        r'^(?:var|large)?binary$$': 'largebinary',  # binary + varbinary + largebinary
+        r'^(?:var|large)?binary$': 'largebinary',  # binary + varbinary + largebinary
         r'^xml$': 'text',
         r'^uuid$': 'text',
         r'^(?:small)?money$': 'numeric',  # money + smallmoney
@@ -62,7 +62,7 @@ _ANALYZE_TYPE = regex_map({
         r'^uniqueidentifier$': 'text',
         r'^bit$': 'numeric',
         r'^int$': 'numeric',
-        r'^smalldatetime': 'timestamp',
+        r'^smalldatetime$': 'timestamp',
         r'^image$': 'largebinary',
         r'^rowversion$': 'numeric',
         r'^hierarchyid$': 'text',
