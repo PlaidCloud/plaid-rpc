@@ -23,7 +23,8 @@ _ANALYZE_TYPE = regex_map({
         r'^boolean$': 'boolean',
         r'^s\d+': 'text',
         r'^object$': 'text',
-        r'^text$': 'text',
+        r'^[n]?text$': 'text',  # text + ntext
+        r'^[n]?char': 'text',  # char + nchar
         r'^nvarchar(\([0-9]*\))*$': 'text',
         r'^varchar(\([0-9]*\))*$': 'text',
         r'^string$': 'text',
@@ -48,15 +49,27 @@ _ANALYZE_TYPE = regex_map({
         r'^date\(.*\)$': 'date', # This covers Date('format') from type guessing
         r'^time\b.*': 'time',
         r'^byte.*': 'largebinary',  # Any byte string goes to large binary
-        r'^largebinary$': 'largebinary',
+        r'^(?:var)?binary$$': 'largebinary',  # binary + varbinary
         r'^xml$': 'text',
         r'^uuid$': 'text',
-        r'^money$': 'numeric',
+        r'^(?:small)?money$': 'numeric',  # money + smallmoney
         r'^real$': 'numeric',
         r'^json$': 'text',
         r'^cidr$': 'text',
         r'^inet$': 'text',
         r'^macaddr$': 'text',
+        r'^cursor$': 'text',  # CRL2022 - No idea if this will work but it is a valid MSSQL data type.
+        r'^uniqueidentifier$': 'text',
+        r'^bit$': 'numeric',
+        r'^int$': 'numeric',
+        r'^smalldatetime': 'timestamp',
+        r'^image$': 'largebinary',
+        r'^rowversion$': 'numeric',
+        r'^hierarchyid$': 'text',
+        r'^sql_variant$': 'text',
+        r'^xml$': 'text',
+        r'^spatial_(?:geometry|geography)_types$': 'text',  # spatial_geometry_types + spatial_geography_types
+        r'^table$': 'text'
 })
 
 _PANDAS_DTYPE_FROM_SQL = regex_map({
@@ -131,7 +144,7 @@ def analyze_type(dtype):
         return 'time'
 
     try:
-        return _ANALYZE_TYPE(key)
+        return _ANALYZE_TYPE(key.lwoer())
     except KeyError:
         raise Exception((
             "Unrecognized dtype: '{}'. If you think it's valid, "
