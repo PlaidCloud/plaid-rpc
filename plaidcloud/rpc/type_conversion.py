@@ -144,7 +144,7 @@ def analyze_type(dtype):
         return 'time'
 
     try:
-        return _ANALYZE_TYPE(key.lwoer())
+        return _ANALYZE_TYPE(key)
     except KeyError:
         raise Exception((
             "Unrecognized dtype: '{}'. If you think it's valid, "
