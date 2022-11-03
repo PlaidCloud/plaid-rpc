@@ -20,7 +20,8 @@ import six
 import six.moves
 import sqlalchemy
 from sqlalchemy.dialects.postgresql.base import PGDialect
-from sqlalchemy.types import TypeDecorator, DateTime, Unicode, CHAR, TEXT, NVARCHAR, UnicodeText
+from sqlalchemy.dialects.mssql.base import MSDialect
+from sqlalchemy.types import TypeDecorator, DateTime, Unicode, CHAR, TEXT, NVARCHAR, UnicodeText, NUMERIC
 from sqlalchemy_hana.dialect import HANABaseDialect
 from sqlalchemy_greenplum.dialect import GreenplumDialect
 
@@ -132,6 +133,24 @@ class StartPath(TypeDecorator):
         """
         return re.sub(r'/+', '/', (startpath or '') + '/').lstrip('/')
 
+
+class PlaidNumeric(TypeDecorator):
+    """Numeric Type that specifies precision on SQL Server"""
+    impl = NUMERIC
+    cache_ok = True
+
+    def load_dialect_impl(self, dialect):
+        """Loads the dialect implementation
+        Note:
+            Implement as NUMERIC(38, 10) in SQL Server
+        Args:
+            dialect (Dialect): SQLAlchemy dialect
+        Returns:
+            str: Type Descriptor"""
+        if is_dialect_sql_server_based(dialect):
+            return dialect.type_Descriptor(NUMERIC(38, 10))
+        else:
+            return self.impl
 
 class PlaidUnicode(TypeDecorator):
     """Unicode Type that implements as UnicodeText on Postgresql based environments
@@ -507,6 +526,17 @@ def get_engine(conn_str=None):
             raise
 
     return engine
+
+
+def is_dialect_sql_server_based(dialect):
+    """Is a dialect derived from underlying SQL Server dialect
+
+    Args:
+        dialect (sqlalchemy.engine.interfaces.Dialect): The dialect to test
+
+    Returns:
+        bool: If the dialect is a descendant of the SQL Server dialect"""
+    return isinstance(dialect, MSDialect)
 
 
 def is_dialect_postgresql_based(dialect):

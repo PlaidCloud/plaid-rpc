@@ -2,14 +2,14 @@
 
 from __future__ import absolute_import
 from sqlalchemy import (
-    BIGINT, INTEGER, SMALLINT, TEXT, Boolean, NUMERIC, TIMESTAMP, Interval, Date, Time
+    BIGINT, INTEGER, SMALLINT, TEXT, Boolean, TIMESTAMP, Interval, Date, Time
 )
 from sqlalchemy.sql.sqltypes import LargeBinary
 
 import messytables
 
 from plaidcloud.rpc.functions import regex_map, RegexMapKeyError
-from plaidcloud.rpc.database import PlaidUnicode
+from plaidcloud.rpc.database import PlaidUnicode, PlaidNumeric
 
 __author__ = 'Paul Morel'
 __copyright__ = 'Copyright 2010-2021, Tartan Solutions, Inc'
@@ -215,9 +215,9 @@ _sqlalchemy_from_dtype = regex_map({
     r'^integer$': INTEGER,
     r'^int64$': BIGINT,  # 8 bytes
     r'^bigint$': BIGINT,
-    r'^float\d*': NUMERIC,  # variable but ensures precision
-    r'^numeric.*': NUMERIC,
-    r'^decimal.*': NUMERIC,
+    r'^float\d*': PlaidNumeric,  # variable but ensures precision
+    r'^numeric.*': PlaidNumeric,
+    r'^decimal.*': PlaidNumeric,
     r'^datetime.*': TIMESTAMP,  # This may have to cover all datetimes
     r'^timestamp\b.*': TIMESTAMP,
     r'^timedelta.*': Interval,  # This may have to cover all timedeltas
@@ -233,8 +233,8 @@ _sqlalchemy_from_dtype = regex_map({
     r'^byte.*': LargeBinary,
     r'^xml$': PlaidUnicode(4000),
     r'^uuid$': PlaidUnicode(36),
-    r'^money$': NUMERIC,
-    r'^real$': NUMERIC,
+    r'^money$': PlaidNumeric,
+    r'^real$': PlaidNumeric,
     r'^json$': PlaidUnicode(4000),
     r'^cidr$': PlaidUnicode(100),
     r'^inet$': PlaidUnicode(100),
