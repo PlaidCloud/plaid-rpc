@@ -148,7 +148,7 @@ class PlaidNumeric(TypeDecorator):
         Returns:
             str: Type Descriptor"""
         if is_dialect_sql_server_based(dialect):
-            return dialect.type_Descriptor(NUMERIC(38, 10))
+            return dialect.type_descriptor(NUMERIC(38, 10))
         else:
             return self.impl
 
