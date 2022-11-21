@@ -1,0 +1,50 @@
+name: Lint PlaidCloud RPC
+on:
+  pull_request:
+    branches:
+      - master
+jobs:
+  reviewdog:
+    name: Lint PlaidCloud RPC w ReviewDog
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Ensure python 3.11
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+      - name: Checkout code
+        uses: actions/checkout@v3
+      - name: Install dependencies
+        run: pip install -r requirements.txt; pip install -q pylint==2.15.5; pip install -q liccheck;
+      - name: License Checker
+        uses: andersy005/gh-action-py-liccheck@main
+        with:
+          strategy-ini-file: ./liccheck.ini
+          level: cautious
+          requirements-txt-file: ./requirements.txt
+      - name: Install ReviewDog
+        uses: reviewdog/action-setup@v1
+      - name: Perform Lint
+        env:
+          REVIEWDOG_GITHUB_API_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          pylint -s n -f text plaidcloud 2>&1 | reviewdog -efm="%f:%l:%c: %m" -name="PyLint" -reporter=github-check -level=warning
+      - name: Perform Tests
+        run: |
+          pytest
+      - name: Test Report
+        uses: dorny/test-reporter@v1
+        if: success() || failure()    # run this step even if previous step failed
+        with:
+          name: Tests               # Name of the check run which will be created
+          path: pytestresult.xml    # Path to test results
+          reporter: java-junit      # Format of test results
+          token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Prepare Coverage Report
+        uses: 5monkeys/cobertura-action@master
+        if: success() || failure()    # run this step even if previous step failed
+        with:
+          path: coverage.xml
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
+          minimum_coverage: 75
