@@ -183,9 +183,8 @@ def setup_scaffolding(config_path='', file_location=''):
     used to live in each separate client repo.
 
     Args:
-        file_location (str): The file path client-specific config file that calls this, based on __file__
-        working_user (str):  local user or overridden (typically 'plaidlink') user.
         config_path (str):   client repo's config directory.  It's where to look for client-specific config yaml.
+        file_location (str): The file path client-specific config file that calls this, based on __file__
     """
     working_user = os.path.expanduser('~')  # This will need work in order to again support satellite deployments under a machine user.
     # initialize(file_location) # Don't remove this line.
@@ -276,6 +275,8 @@ class PlaidConfig(object):
             _create_necessary_directories()
             _set_runtime_options()
 
+            if 'local' not in self._C:
+                self._C['local'] = {}
             self.debug = self._C['local'].setdefault('debug', True)
             self.fetch = self._C['local'].setdefault('fetch', True)
             self.cache_locally = self._C['local'].setdefault('cache_locally', False)
@@ -448,6 +449,7 @@ class PlaidConfig(object):
             raise Exception('Step Id has not been set')
         return self._step_id
 
+
 def find_plaid_conf(path=None):
     """Finds plaid.conf by searching upwards for first plaid.conf it finds"""
     root = find_workspace_root(path)
@@ -463,12 +465,14 @@ def find_plaid_conf(path=None):
             f'{str(one_down)} exist.'
         )
 
+
 def find_workspace_root(path=None):
     """Finds the workspace root by searching upwards for first plaid.conf it finds"""
     if path:
         path = Path(path).resolve()
     else:
         path = Path.cwd()
+
     def recurse(path):
         if (
             path.joinpath(CONFIG_NAME).exists()
