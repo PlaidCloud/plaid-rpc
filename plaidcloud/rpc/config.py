@@ -358,23 +358,21 @@ class PlaidConfig(object):
             """
             if working_user:
                 self._working_user = working_user
-            paths = self._C['paths']
-            try:
-                paths['PROJECT_ROOT'] = paths['PROJECT_ROOT'].format(WORKING_USER=self._working_user)
-            except Exception:
-                logger.exception('Error Reading Paths from {}'.format(config_path))
+            if 'paths' in self._C:
+                paths = self._C['paths']
+                try:
+                    paths['PROJECT_ROOT'] = paths['PROJECT_ROOT'].format(WORKING_USER=self._working_user)
+                except Exception:
+                    logger.exception('Error Reading Paths from {}'.format(config_path))
 
-            project_root = paths['PROJECT_ROOT']
-            paths['LOCAL_STORAGE'] = paths['LOCAL_STORAGE'].format(PROJECT_ROOT=project_root)
-            paths['DEBUG'] = paths['DEBUG'].format(PROJECT_ROOT=project_root)
-            paths['REPORTS'] = paths['REPORTS'].format(PROJECT_ROOT=project_root)
-
-            # TODO: Deprecate this.
-            # self._C['options']['LOCAL_STORAGE'] = paths['LOCAL_STORAGE']
+                project_root = paths['PROJECT_ROOT']
+                paths['LOCAL_STORAGE'] = paths['LOCAL_STORAGE'].format(PROJECT_ROOT=project_root)
+                paths['DEBUG'] = paths['DEBUG'].format(PROJECT_ROOT=project_root)
+                paths['REPORTS'] = paths['REPORTS'].format(PROJECT_ROOT=project_root)
 
         def _create_necessary_directories():
             """Create dirs listed in config."""
-            for d in self._C['paths']['create']:
+            for d in self._C.get('paths', {}).get('create', []):
                 # TODO - maybe add other path substitution options here.
                 path_to_create = d.format(PROJECT_ROOT=self._C['paths']['PROJECT_ROOT'])
                 makedirs(path_to_create)
