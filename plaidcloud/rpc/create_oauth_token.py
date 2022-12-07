@@ -64,7 +64,7 @@ def refresh_token(grant_type: str, client_id: str, refresh_token: str, uri: str=
     return token_response.json()
 
 
-def create_oauth_token(grant_type, client_id, client_secret, scopes='openid', username=None, password=None, uri='https://plaidcloud.com/', realm="PlaidCloud", proxy_settings=None):
+def create_oauth_token(grant_type, client_id, client_secret, scopes='openid', username=None, password=None, uri='https://plaidcloud.com/', realm="PlaidCloud", proxy_settings=None, verify=True):
     """Attempts to create an Oauth2 auth token using the provided data
 
     This is designed primarily for password-type grants, but should work for client credentials as well.
@@ -105,7 +105,7 @@ def create_oauth_token(grant_type, client_id, client_secret, scopes='openid', us
             "client_id": client_id,
             "client_secret": client_secret,
         }
-        token = requests.post(token_url, headers=headers, data=payload, proxies=proxy_settings)
+        token = requests.post(token_url, headers=headers, data=payload, proxies=proxy_settings, verify=verify)
     else:
         payload = {
             "grant_type": "password",
@@ -115,7 +115,7 @@ def create_oauth_token(grant_type, client_id, client_secret, scopes='openid', us
             "username": username,
             "password": password,
         }
-        token = requests.post(token_url, headers=headers, data=payload, proxies=proxy_settings)
+        token = requests.post(token_url, headers=headers, data=payload, proxies=proxy_settings, verify=verify)
     token.raise_for_status()
     token = token.json()
     return token
