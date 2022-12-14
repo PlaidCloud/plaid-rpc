@@ -25,8 +25,8 @@ _ANALYZE_TYPE = regex_map({
         r'^object$': 'text',
         r'^[n]?text$': 'text',  # text + ntext
         r'^[n]?char': 'text',  # char + nchar
-        r'^nvarchar(\([0-9]*\))*$': 'text',
-        r'^varchar(\([0-9]*\))*$': 'text',
+        r'^nvarchar(\([0-9]*\))*': 'text',
+        r'^varchar(\([0-9]*\))*': 'text',
         r'^string$': 'text',
         r'^int8$': 'smallint',
         r'^tinyint$': 'smallint',
@@ -67,7 +67,6 @@ _ANALYZE_TYPE = regex_map({
         r'^rowversion$': 'numeric',
         r'^hierarchyid$': 'text',
         r'^sql_variant$': 'text',
-        r'^xml$': 'text',
         r'^spatial_(?:geometry|geography)_types$': 'text',  # spatial_geometry_types + spatial_geography_types
         r'^table$': 'text'
 })
