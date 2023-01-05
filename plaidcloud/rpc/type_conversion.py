@@ -228,6 +228,7 @@ _sqlalchemy_from_dtype = regex_map({
     r'^file_name$': PlaidUnicode(4000),
     r'^tab_name$': PlaidUnicode(4000),
     r'^last_modified': TIMESTAMP,
+    r'^source_row_number$': INTEGER,
     r'^largebinary': LargeBinary,
     r'^byte.*': LargeBinary,
     r'^xml$': PlaidUnicode(4000),
