@@ -210,6 +210,7 @@ class PlaidConfig(object):
     client_id = ''
     client_secret = ''
     hostname = ''
+    auth_uri = ''
     token_uri = ''
     redirect_uri = ''
     name = ''
@@ -238,6 +239,7 @@ class PlaidConfig(object):
                 # If this is running in UDF or Jupyter notebook then an RPC connection is already available
                 # Grab config values put in environment variables
                 self.rpc_uri = os.environ['__PLAID_RPC_URI__']
+                self.auth_uri = os.environ.get('__PLAID_AUTH_URI__')
                 self.auth_token = os.environ['__PLAID_RPC_AUTH_TOKEN__']
                 self._project_id = os.environ['__PLAID_PROJECT_ID__']
                 self.workspace_id = int(os.environ['__PLAID_WORKSPACE_ID__'])
@@ -306,12 +308,10 @@ class PlaidConfig(object):
             self.client_id = self.config['client_id']
             self.client_secret = self.config['client_secret']
             self.hostname = self.config['hostname']
-            self.realm = self.config["realm"]
-            if ".net" in self.hostname:
-                self.token_uri = f'https://plaidcloud.com/auth/realms/{self.realm}/protocol/openid-connect/token'
-            else:
-                self.token_uri = 'https://{}/auth/realms/{}/protocol/openid-connect/token'.format(self.hostname, self.realm)
-            self.rpc_uri = 'https://{}/json-rpc/'.format(self.hostname)
+            self.auth_uri = self.config.get('auth_uri', f'https://{self.hostname}/auth')
+            self.realm = self.config['realm']
+            self.token_uri = f'{self.auth_uri}/realms/{self.realm}/protocol/openid-connect/token'
+            self.rpc_uri = f'https://{self.hostname}/json-rpc/'
 
             self.redirect_uri = self.config.get('redirect_uri', '')
             self.auth_token = self.config.get('auth_token')
