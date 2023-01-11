@@ -58,7 +58,8 @@ def refresh_token(grant_type: str, client_id: str, refresh_token: str, uri: str=
         "refresh_token": refresh_token,
     }
 
-    token_url = f"{uri}auth/realms/{realm}/protocol/openid-connect/token"
+    uri = uri.rstrip('/')
+    token_url = f"{uri}/realms/{realm}/protocol/openid-connect/token"
     token_response = requests.post(token_url, headers=headers, json=payload, proxies=proxy_settings)
     token_response.raise_for_status()
     return token_response.json()
@@ -93,7 +94,8 @@ def create_oauth_token(grant_type, client_id, client_secret, scopes='openid', us
     if grant_type == 'password' and None in [username, password]:
         raise Exception('Missing username or password for password-type grant')
 
-    token_url = f"{uri}/auth/realms/{realm}/protocol/openid-connect/token"
+    uri = uri.rstrip('/')
+    token_url = f"{uri}/realms/{realm}/protocol/openid-connect/token"
     headers = {
         "Content-Type": "application/x-www-form-urlencoded"
     }
