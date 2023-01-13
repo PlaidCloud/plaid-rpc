@@ -250,17 +250,17 @@ def sqlalchemy_from_dtype(dtype):
         >>> sqlalchemy_from_dtype('time')
         <class 'sqlalchemy.sql.sqltypes.Time'>
         >>> sqlalchemy_from_dtype('timestamp')
-        <class 'sqlalchemy.sql.sqltypes.TIMESTAMP'>
+        <class 'plaidcloud.rpc.database.PlaidTimestamp'>
         >>> sqlalchemy_from_dtype('timestamp with time zone')
-        <class 'sqlalchemy.sql.sqltypes.TIMESTAMP'>
+        <class 'plaidcloud.rpc.database.PlaidTimestamp'>
         >>> sqlalchemy_from_dtype('timestamp without time zone')
-        <class 'sqlalchemy.sql.sqltypes.TIMESTAMP'>
+        <class 'plaidcloud.rpc.database.PlaidTimestamp'>
         >>> sqlalchemy_from_dtype('time with time zone')
         <class 'sqlalchemy.sql.sqltypes.Time'>
         >>> sqlalchemy_from_dtype('time without time zone')
         <class 'sqlalchemy.sql.sqltypes.Time'>
         >>> sqlalchemy_from_dtype('datetime64')
-        <class 'sqlalchemy.sql.sqltypes.TIMESTAMP'>
+        <class 'plaidcloud.rpc.database.PlaidTimestamp'>
         >>> sqlalchemy_from_dtype('date')
         <class 'sqlalchemy.sql.sqltypes.Date'>
     """
