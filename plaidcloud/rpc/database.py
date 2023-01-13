@@ -21,7 +21,7 @@ import six.moves
 import sqlalchemy
 from sqlalchemy.dialects.postgresql.base import PGDialect
 from sqlalchemy.dialects.mssql.base import MSDialect
-from sqlalchemy.types import TypeDecorator, DateTime, Unicode, CHAR, TEXT, NVARCHAR, UnicodeText, NUMERIC
+from sqlalchemy.types import TypeDecorator, DateTime, Unicode, CHAR, TEXT, NVARCHAR, UnicodeText, NUMERIC, TIMESTAMP, DATETIME
 from sqlalchemy_hana.dialect import HANABaseDialect
 from sqlalchemy_greenplum.dialect import GreenplumDialect
 
@@ -132,6 +132,25 @@ class StartPath(TypeDecorator):
         (like "", None, or False).
         """
         return re.sub(r'/+', '/', (startpath or '') + '/').lstrip('/')
+
+
+class PlaidTimestamp(TypeDecorator):
+    """Timestamp that automatically converts to DateTime on SQL server"""
+    impl = TIMESTAMP
+    cache_ok = True
+
+    def load_dialect_impl(self, dialect):
+        """Loads the dialect implementation
+        Note:
+            Implement as DATETIME in SQL Server
+        Args:
+            dialect (Dialect): SQLAlchemy dialect
+        Returns:
+            str: Type Descriptor"""
+        if is_dialect_sql_server_based(dialect):
+            return dialect.type_descriptor(DATETIME)
+        else:
+            return self.impl
 
 
 class PlaidNumeric(TypeDecorator):
