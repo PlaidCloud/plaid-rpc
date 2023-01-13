@@ -9,7 +9,7 @@ from sqlalchemy.sql.sqltypes import LargeBinary
 import messytables
 
 from plaidcloud.rpc.functions import regex_map, RegexMapKeyError
-from plaidcloud.rpc.database import PlaidUnicode, PlaidNumeric
+from plaidcloud.rpc.database import PlaidUnicode, PlaidNumeric, PlaidTimestamp
 
 __author__ = 'Paul Morel'
 __copyright__ = 'Copyright 2010-2021, Tartan Solutions, Inc'
@@ -217,8 +217,8 @@ _sqlalchemy_from_dtype = regex_map({
     r'^float\d*': PlaidNumeric,  # variable but ensures precision
     r'^numeric.*': PlaidNumeric,
     r'^decimal.*': PlaidNumeric,
-    r'^datetime.*': TIMESTAMP,  # This may have to cover all datetimes
-    r'^timestamp\b.*': TIMESTAMP,
+    r'^datetime.*': PlaidTimestamp,  # This may have to cover all datetimes
+    r'^timestamp\b.*': PlaidTimestamp,
     r'^timedelta.*': Interval,  # This may have to cover all timedeltas
     r'^interval$': Interval,
     r'^date$': Date,
@@ -227,7 +227,7 @@ _sqlalchemy_from_dtype = regex_map({
     r'^path': PlaidUnicode(4000),
     r'^file_name$': PlaidUnicode(4000),
     r'^tab_name$': PlaidUnicode(4000),
-    r'^last_modified': TIMESTAMP,
+    r'^last_modified': PlaidTimestamp,
     r'^source_row_number$': INTEGER,
     r'^largebinary': LargeBinary,
     r'^byte.*': LargeBinary,
@@ -250,17 +250,17 @@ def sqlalchemy_from_dtype(dtype):
         >>> sqlalchemy_from_dtype('time')
         <class 'sqlalchemy.sql.sqltypes.Time'>
         >>> sqlalchemy_from_dtype('timestamp')
-        <class 'sqlalchemy.sql.sqltypes.TIMESTAMP'>
+        <class 'plaidcloud.rpc.database.PlaidTimestamp'>
         >>> sqlalchemy_from_dtype('timestamp with time zone')
-        <class 'sqlalchemy.sql.sqltypes.TIMESTAMP'>
+        <class 'plaidcloud.rpc.database.PlaidTimestamp'>
         >>> sqlalchemy_from_dtype('timestamp without time zone')
-        <class 'sqlalchemy.sql.sqltypes.TIMESTAMP'>
+        <class 'plaidcloud.rpc.database.PlaidTimestamp'>
         >>> sqlalchemy_from_dtype('time with time zone')
         <class 'sqlalchemy.sql.sqltypes.Time'>
         >>> sqlalchemy_from_dtype('time without time zone')
         <class 'sqlalchemy.sql.sqltypes.Time'>
         >>> sqlalchemy_from_dtype('datetime64')
-        <class 'sqlalchemy.sql.sqltypes.TIMESTAMP'>
+        <class 'plaidcloud.rpc.database.PlaidTimestamp'>
         >>> sqlalchemy_from_dtype('date')
         <class 'sqlalchemy.sql.sqltypes.Date'>
     """
