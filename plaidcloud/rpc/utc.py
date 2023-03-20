@@ -1,13 +1,12 @@
 #!/usr/bin/env python
 # coding=utf-8
 
-from __future__ import absolute_import
 import calendar
 import time
 import datetime
 
 __author__ = 'Paul Morel'
-__copyright__ = 'Copyright 2010-2020, Tartan Solutions, Inc'
+__copyright__ = 'Copyright 2010-2023, Tartan Solutions, Inc'
 __credits__ = ['Paul Morel']
 __license__ = 'Apache 2.0'
 __maintainer__ = 'Paul Morel'

@@ -1,6 +1,5 @@
 # coding=utf-8
 
-from __future__ import absolute_import
 import unittest
 from nose.tools import assert_equal, assert_raises, assert_true, assert_false
 
@@ -27,10 +26,10 @@ class TestAuth(unittest.TestCase):
 
     def test_is_ok(self):
         obj = Auth()
-        obj._auth_status = u'ok'
+        obj._auth_status = 'ok'
         assert_true(obj.is_ok())
 
-        conditions_not_ok = (u'fail', u'ready', u'setup')
+        conditions_not_ok = ('fail', 'ready', 'setup')
         for cno in conditions_not_ok:
             obj._auth_status = cno
             assert_false(obj.is_ok())
@@ -43,7 +42,7 @@ class TestAuth(unittest.TestCase):
 
         assert_equal(obj._public_key, user_name)
         assert_equal(obj._private_key, password)
-        assert_equal(obj._auth_method, u'user')
+        assert_equal(obj._auth_method, 'user')
 
     def test_user_based_mfa_auth(self):
         obj = Auth()
@@ -55,7 +54,7 @@ class TestAuth(unittest.TestCase):
         assert_equal(obj._public_key, user_name)
         assert_equal(obj._private_key, password)
         assert_equal(obj._mfa, mfa)
-        assert_equal(obj._auth_method, u'user')
+        assert_equal(obj._auth_method, 'user')
 
     def test_agent_based_auth(self):
         obj = Auth()
@@ -65,34 +64,34 @@ class TestAuth(unittest.TestCase):
 
         assert_equal(obj._public_key, public_key)
         assert_equal(obj._private_key, private_key)
-        assert_equal(obj._auth_method, u'agent')
+        assert_equal(obj._auth_method, 'agent')
 
     def test_transform_based_auth(self):
         obj = Auth()
         task_id = 'test_public'
         session_id = 'test_private'
-        auth_method = u'transform'
+        auth_method = 'transform'
         obj.agent(task_id, session_id, auth_method)
 
         assert_equal(obj._public_key, task_id)
         assert_equal(obj._private_key, session_id)
-        assert_equal(obj._auth_method, u'transform')
+        assert_equal(obj._auth_method, 'transform')
 
     def test_get_method(self):
         obj = Auth()
-        obj.set_method(u'user')
+        obj.set_method('user')
 
-        assert_equal(obj.get_method(), u'user')
+        assert_equal(obj.get_method(), 'user')
 
     def test_get_status(self):
         obj = Auth()
-        obj._auth_status = u'setup'
+        obj._auth_status = 'setup'
 
-        assert_equal(obj.get_auth_status(), u'setup')
+        assert_equal(obj.get_auth_status(), 'setup')
 
     def test_get_status_message(self):
         obj = Auth()
-        message = u'yo ho ho and a bottle of rum!'
+        message = 'yo ho ho and a bottle of rum!'
         obj._status_message = message
 
         assert_equal(obj.get_status_message(), message)
@@ -105,26 +104,26 @@ class TestAuth(unittest.TestCase):
 
     def test_get_public_key(self):
         obj = Auth()
-        obj._public_key = u'test_public_key'
+        obj._public_key = 'test_public_key'
 
-        assert_equal(obj._get_public_key(), u'test_public_key')
+        assert_equal(obj._get_public_key(), 'test_public_key')
 
     def test_get_private_key(self):
         obj = Auth()
-        obj._private_key = u'test_private_key'
+        obj._private_key = 'test_private_key'
 
-        assert_equal(obj._get_private_key(), u'test_private_key')
+        assert_equal(obj._get_private_key(), 'test_private_key')
 
     def test_get_mfa(self):
         obj = Auth()
-        obj._mfa = u'mfa value 123'
+        obj._mfa = 'mfa value 123'
 
-        assert_equal(obj._get_mfa(), u'mfa value 123')
+        assert_equal(obj._get_mfa(), 'mfa value 123')
 
     def test_set_method(self):
         obj = Auth()
 
-        legit_methods = (u'user', u'agent', u'transform')
+        legit_methods = ('user', 'agent', 'transform')
 
         for lm in legit_methods:
             obj.set_method(lm)
@@ -137,7 +136,7 @@ class TestAuth(unittest.TestCase):
     def test_set_status_positive(self):
         obj = Auth()
 
-        legit_status = (u'setup', u'ready', u'ok', u'fail')
+        legit_status = ('setup', 'ready', 'ok', 'fail')
 
         for ls in legit_status:
             obj.set_status(ls)
@@ -156,7 +155,7 @@ class TestAuth(unittest.TestCase):
 
         package = obj.get_package()
 
-        assert_equal(package['PlaidCloud-Auth-Method'], str(u'user'))
+        assert_equal(package['PlaidCloud-Auth-Method'], str('user'))
         assert_equal(package['PlaidCloud-Key'], user_name)
         assert_equal(package['PlaidCloud-Pass'], password)
         assert_equal(package['PlaidCloud-MFA'], mfa)

@@ -4,14 +4,12 @@
 Useful functions for working with files.
 """
 
-from __future__ import absolute_import
 import os
 import ctypes
 import errno
-from six import text_type
 
 __author__ = 'Paul Morel'
-__copyright__ = 'Copyright 2010-2020, Tartan Solutions, Inc'
+__copyright__ = 'Copyright 2010-2023, Tartan Solutions, Inc'
 __credits__ = ['Paul Morel']
 __license__ = 'Apache 2.0'
 __maintainer__ = 'Paul Morel'
@@ -52,7 +50,7 @@ def set_windows_hidden(path):
     FILE_ATTRIBUTES_HIDDEN = 0x2
 
     # API call requirements: Unicode, proper Windows backslashes
-    windows_path = text_type(path.replace('/', '\\'))
+    windows_path = str(path.replace('/', '\\'))
 
     return_code = ctypes.windll.kernel32.SetFileAttributesW(
         windows_path, FILE_ATTRIBUTES_HIDDEN)

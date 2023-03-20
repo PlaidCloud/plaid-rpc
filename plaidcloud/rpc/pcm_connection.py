@@ -2,22 +2,14 @@
 # coding=utf-8
 # pylint:disable=import-error, no-name-in-module
 
-from __future__ import absolute_import
-from __future__ import print_function
 import time
 from os import path
+from winreg import ConnectRegistry, OpenKey, QueryValueEx, HKEY_LOCAL_MACHINE
 from comtypes import client, COMError, CoInitialize, CoUninitialize
 from win32api import GetFileVersionInfo, LOWORD, HIWORD
-# from six.moves import winreg
-import sys
-from six.moves import range
-if sys.version_info >= (3, 0):
-    from winreg import ConnectRegistry, OpenKey, QueryValueEx, HKEY_LOCAL_MACHINE
-else:
-    from six.moves.winreg import ConnectRegistry, OpenKey, QueryValueEx, HKEY_LOCAL_MACHINE
 
 __author__ = 'Paul Morel'
-__copyright__ = 'Copyright 2010-2020, Tartan Solutions, Inc'
+__copyright__ = 'Copyright 2010-2023, Tartan Solutions, Inc'
 __credits__ = ['Paul Morel']
 __license__ = 'Apache 2.0'
 __maintainer__ = 'Paul Morel'
@@ -26,7 +18,7 @@ __email__ = 'paul.morel@tartansolutions.com'
 
 def get_pcm_install_directory():
     registry = ConnectRegistry(None, HKEY_LOCAL_MACHINE)
-    pcm_key = OpenKey(registry, u'SOFTWARE\\Wow6432Node\\Business Objects\\Profitability')
+    pcm_key = OpenKey(registry, 'SOFTWARE\\Wow6432Node\\Business Objects\\Profitability')
     return QueryValueEx(pcm_key, 'InstallDir')[0]
 
 
@@ -40,9 +32,9 @@ def get_version_number(filename):
         tuple[int, int, int, int]: Major, Minor, Build, Revision
 
     Examples:
-        >>> get_version_number(u'C:/Program Files (x86)/SAP BusinessObjects/PCM/PCM.dll') # doctest: +SKIP
+        >>> get_version_number('C:/Program Files (x86)/SAP BusinessObjects/PCM/PCM.dll') # doctest: +SKIP
         (10, 0, 11, 10)
-        >>> get_version_number(u'C:/NotExistentFile') # doctest: +SKIP
+        >>> get_version_number('C:/NotExistentFile') # doctest: +SKIP
         Exc
     """
     info = GetFileVersionInfo(filename, "\\")
@@ -61,11 +53,11 @@ def get_pcm_10_service_pack(filename):
         The Service Pack Number of the file
 
     Examples:
-        >>> get_pcm_10_service_pack(u'C:/Program Files (x86)/SAP BusinessObjects/PCM/PCM.dll') # doctest: +SKIP
+        >>> get_pcm_10_service_pack('C:/Program Files (x86)/SAP BusinessObjects/PCM/PCM.dll') # doctest: +SKIP
         Traceback (most recent call last):
         ...
         WindowsError: [Error 2] The system cannot find the file specified
-        >>> get_pcm_10_service_pack(u'C:/NotExistentFile') # doctest: +SKIP
+        >>> get_pcm_10_service_pack('C:/NotExistentFile') # doctest: +SKIP
         Traceback (most recent call last):
         ...
         WindowsError: [Error 2] The system cannot find the file specified
@@ -140,7 +132,7 @@ class PCMConnection(object):
 
         """
         if self._pcm_sp_version < 12:
-            return method(u'', *args)
+            return method('', *args)
         else:
             return method(*args)
 
@@ -179,10 +171,10 @@ class PCMConnection(object):
                 self._pcm_users_dll.ssoDefault,
                 username,
                 password,
-                u'',
+                '',
                 self._pcm_users_dll.pfEPO,
                 self._pcm_users_dll.pcPPGUI,
-                u''
+                ''
             )
             self._server = return_value[0]
             self._session_id = return_value[1]
@@ -287,7 +279,7 @@ class PCMConnection(object):
             self._IPCMModel.ModelServer, model_name
         )
         if self._pcm_sp_version < 12:
-            self._IPCMModel.ModelServer[u'', model_name] = model_server
+            self._IPCMModel.ModelServer['', model_name] = model_server
         else:
             self._IPCMModel.ModelServer[model_name] = model_server
 
@@ -316,7 +308,7 @@ class PCMConnection(object):
         # now do creation (can the user do it??? need to figure out that check)
         try:
             self._call_pcm_method(
-                self._IPCMModel.CreateModel, new_model_name, u'', enable_audit, model_type
+                self._IPCMModel.CreateModel, new_model_name, '', enable_audit, model_type
             )
             default_model_server = self._call_pcm_method(
                 self._IPCMUser.DefaultServer, 1
@@ -351,7 +343,7 @@ class PCMConnection(object):
                 self._IPCMModel.CopyModel,
                 src_model_name,
                 target_model_name,
-                u''
+                ''
             )
             return True
         except COMError as e:
@@ -491,7 +483,7 @@ class PCMConnection(object):
 
         """
         if self._pcm_sp_version < 12:
-            self._IPCMModel.CalculationActive[u''] = calculation_state
+            self._IPCMModel.CalculationActive[''] = calculation_state
             # or maybe self._IPCMModel.CalculationActive[()] = calculation_state
         else:
             self._IPCMModel.CalculationActive = calculation_state
