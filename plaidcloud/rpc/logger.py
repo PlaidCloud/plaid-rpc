@@ -1,18 +1,14 @@
 #!/usr/bin/env python
 # coding=utf-8
 
-from __future__ import absolute_import
-
 import logging
 import uuid
 import os
 
-from six import text_type
-
 from plaidcloud.rpc.rpc_connect import Connect
 
 __author__ = "Paul Morel"
-__copyright__ = "© Copyright 2019, Tartan Solutions, Inc"
+__copyright__ = "© Copyright 2019-2023, Tartan Solutions, Inc"
 __credits__ = ["Paul Morel"]
 __license__ = "Apache 2.0"
 __email__ = "paul.morel@tartansolutions.com"
@@ -44,7 +40,7 @@ class LogHandler(logging.Handler):
             try:
                 # See if this is a project ID already
                 uuid.UUID(project)
-                self.project_id = text_type(project)
+                self.project_id = str(project)
             except ValueError:
                 if '/' in project:
                     # This is a path lookup
@@ -59,7 +55,7 @@ class LogHandler(logging.Handler):
             try:
                 # See if this is a workflow ID already
                 uuid.UUID(workflow)
-                self.workflow_id = text_type(workflow)
+                self.workflow_id = str(workflow)
             except ValueError:
                 if '/' in workflow:
                     # This is a path lookup
@@ -76,7 +72,7 @@ class LogHandler(logging.Handler):
         if step:
             # Since steps are not UUIDs we unfortunately need to make a network call to see if this returns anything
             if self.rpc.analyze.step.step(project_id=self.project_id, step_id=step):
-                self.step_id = text_type(step)
+                self.step_id = str(step)
             else:
                 if '/' in step:
                     # This is a path lookup

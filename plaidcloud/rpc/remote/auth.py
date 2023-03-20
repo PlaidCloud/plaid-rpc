@@ -1,12 +1,10 @@
 # coding=utf-8
 
-from __future__ import absolute_import
 from plaidcloud.rpc import utc
-from six import text_type
 
 __author__ = 'Paul Morel'
 __maintainer__ = 'Paul Morel <paul.morel@tartansolutions.com>'
-__copyright__ = '© Copyright 2017, Tartan Solutions, Inc'
+__copyright__ = '© Copyright 2017-2023, Tartan Solutions, Inc'
 __license__ = 'Apache 2.0'
 
 
@@ -51,12 +49,12 @@ class Auth(object):
 
     def user(self, user_name, password, multi_factor=None):
         """Used for User based connections requiring login credentials"""
-        self.set_method(u'user')
+        self.set_method('user')
         self._set_public_key(user_name)
         self._set_private_key(password)
         self._set_multi_factor(multi_factor)
 
-    def agent(self, public_key, private_key, auth_method=u'agent'):
+    def agent(self, public_key, private_key, auth_method='agent'):
         """Used for PlaidLink agent based connections requireing the key information in PlaidCloud"""
         self.set_method(auth_method)
         self._set_public_key(public_key)
@@ -64,17 +62,17 @@ class Auth(object):
 
     def transform(self, task_id, session_id):
         """Transform based connection requiring the transform task_id and session_id"""
-        self.set_method(u'transform')
+        self.set_method('transform')
         self._set_public_key(task_id)
         self._set_private_key(session_id)
 
     def oauth2(self, token):
         """oAuth2 based authentication connection"""
-        self.set_method(u'oauth2')
+        self.set_method('oauth2')
         self._set_public_key(token)
 
     def is_ok(self):
-        return self._auth_status == u'ok'
+        return self._auth_status == 'ok'
 
     def get_status_message(self):
         return self._status_message
@@ -89,25 +87,25 @@ class Auth(object):
         return self._auth_status
 
     def set_status_message(self, value):
-        self._status_message = text_type(value)
+        self._status_message = str(value)
 
     def set_method(self, value):
-        if value in (u'user', u'agent', u'transform', u'oauth2'):
+        if value in ('user', 'agent', 'transform', 'oauth2'):
             self._auth_method = value
         else:
             raise Exception("Invalid Authentication Method Specified")
 
     def set_status(self, value):
-        if value in (u'setup', u'ready', u'ok', u'fail'):
+        if value in ('setup', 'ready', 'ok', 'fail'):
             self.status = value
         else:
             raise Exception("Invalid Authentication Status Specified")
 
     def _set_private_key(self, value):
-        self._private_key = text_type(value)
+        self._private_key = str(value)
 
     def _set_public_key(self, value):
-        self._public_key = text_type(value)
+        self._public_key = str(value)
 
     def _set_multi_factor(self, value):
         self._mfa = value

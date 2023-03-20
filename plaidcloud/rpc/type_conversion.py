@@ -1,6 +1,5 @@
 #!/usr/bin/env python
 
-from __future__ import absolute_import
 from sqlalchemy import (
     BIGINT, INTEGER, SMALLINT, TEXT, Boolean, TIMESTAMP, Interval, Date, Time
 )
@@ -13,7 +12,7 @@ from plaidcloud.rpc.functions import regex_map, RegexMapKeyError
 from plaidcloud.rpc.database import PlaidUnicode, PlaidNumeric, PlaidTimestamp
 
 __author__ = 'Paul Morel'
-__copyright__ = 'Copyright 2010-2021, Tartan Solutions, Inc'
+__copyright__ = 'Copyright 2010-2023, Tartan Solutions, Inc'
 __credits__ = ['Paul Morel']
 __license__ = 'Apache 2.0'
 __maintainer__ = 'Paul Morel'

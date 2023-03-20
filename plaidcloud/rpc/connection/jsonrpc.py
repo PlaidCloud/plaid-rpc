@@ -1,12 +1,10 @@
 # coding=utf-8
 
-from __future__ import absolute_import
-from __future__ import print_function
-
 import os
 import tempfile
 
 import urllib3
+import urllib3.exceptions
 import requests
 from requests.adapters import HTTPAdapter
 from requests_futures.sessions import FuturesSession
@@ -26,7 +24,7 @@ urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 __author__ = 'Paul Morel'
 __credits__ = ['Paul Morel', 'Adams Tower']
 __maintainer__ = 'Adams Tower <adams.tower@tartansolutions.com>'
-__copyright__ = '© Copyright 2019, Tartan Solutions, Inc'
+__copyright__ = '© Copyright 2019-2023, Tartan Solutions, Inc'
 __license__ = 'Apache 2.0'
 
 STREAM_ENDPOINTS = {

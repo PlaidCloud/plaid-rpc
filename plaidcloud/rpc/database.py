@@ -4,7 +4,6 @@
 Database Utility
 Utility functions for interacting with the database.
 """
-from __future__ import absolute_import
 import errno
 import getpass
 import logging
@@ -14,10 +13,9 @@ import time
 import datetime
 import re
 import uuid
+import queue
 import unicodecsv as csv
 
-import six
-import six.moves
 import sqlalchemy
 from sqlalchemy.dialects.postgresql.base import PGDialect
 from sqlalchemy.dialects.mssql.base import MSDialect
@@ -28,7 +26,7 @@ from sqlalchemy_greenplum.dialect import GreenplumDialect
 from plaidcloud.rpc import config
 
 __author__ = 'Paul Morel'
-__copyright__ = 'Copyright 2010-2020, Tartan Solutions, Inc'
+__copyright__ = 'Copyright 2010-2023, Tartan Solutions, Inc'
 __credits__ = ['Paul Morel']
 __license__ = 'Apache 2.0'
 __maintainer__ = 'Paul Morel'
@@ -100,7 +98,7 @@ class GUID(TypeDecorator):
         if value is None:
             return value
         else:
-            return six.text_type(uuid.UUID(value))
+            return str(uuid.UUID(value))
 
 
 class StartPath(TypeDecorator):
@@ -208,7 +206,7 @@ def text_repr(val):
         str: The string representation of `val`
     """
 
-    if isinstance(val, six.text_type):
+    if isinstance(val, str):
         val_text = val.encode('utf8', 'ignore')
     elif val is None:
         val_text = ''
@@ -281,7 +279,7 @@ def query_and_call(connection, sql_file_obj, callback, callback_args=None,
 
         total_records = 0
         fetch_limit = 5000
-        fetch_queue = six.moves.queue.Queue(fetch_limit)
+        fetch_queue = queue.Queue(fetch_limit)
         fetch_failed = threading.Event()
         ts = time.time()
         t = threading.Thread(target=_fetch_to_queue,
@@ -292,7 +290,7 @@ def query_and_call(connection, sql_file_obj, callback, callback_args=None,
         while read_queue:
             try:
                 row = fetch_queue.get(block=False)
-            except six.moves.queue.Empty:
+            except queue.Empty:
                 pass
             else:
                 total_records += 1
@@ -359,7 +357,7 @@ def from_query_to_path(connection, sql_path_or_fo, results_path_or_fo):
     """
 
     # Figure out if paths or file-like objects were provided as arguments.
-    if type(sql_path_or_fo) in six.string_types:
+    if isinstance(sql_path_or_fo, str):
         # Assume it's a path.
         fi = open(sql_path_or_fo, 'r')
         using_sql_path = True
@@ -368,7 +366,7 @@ def from_query_to_path(connection, sql_path_or_fo, results_path_or_fo):
         fi = sql_path_or_fo
         using_sql_path = False
 
-    if type(results_path_or_fo) in six.string_types:
+    if isinstance(results_path_or_fo, str):
         # Assume it's a path.
         temp_results_path = results_path_or_fo + '.tmp'
         fo = open(temp_results_path, 'w')
@@ -437,7 +435,7 @@ def from_query_to_path_csv(connection, sql_path_or_fo, results_path_or_fo):
     """
 
     # Figure out if paths or file-like objects were provided as arguments.
-    if type(sql_path_or_fo) in six.string_types:
+    if isinstance(sql_path_or_fo, str):
         # Assume it's a path.
         fi = open(sql_path_or_fo, 'r')
         using_sql_path = True
@@ -446,7 +444,7 @@ def from_query_to_path_csv(connection, sql_path_or_fo, results_path_or_fo):
         fi = sql_path_or_fo
         using_sql_path = False
 
-    if type(results_path_or_fo) in six.string_types:
+    if isinstance(results_path_or_fo, str):
         # Assume it's a path.
         temp_results_path = results_path_or_fo + '.tmp'
         fo = open(temp_results_path, 'w')
@@ -523,13 +521,11 @@ def get_engine(conn_str=None):
             # print("HAS ATTR MESSAGE ")
             # This is a psycopg2-raised error.
             logger.debug('No credentials. Asking for username & password...')
-            username = six.moves.input("Login name for '{}': ".format(db))
-            password = getpass.getpass("Password for {} on '{}': "
-                                       .format(username, db))
-            remember = six.moves.input(
-                    "Remember these credentials in the "
-                    "config for this process?\n(They will "
-                    "not be saved to disk.) (y/N): "
+            username = input(f"Login name for '{db}': ")
+            password = getpass.getpass(f"Password for {username} on '{db}': ")
+            remember = input(
+                "Remember these credentials in the config for this process?\n"
+                "(They will not be saved to disk.) (y/N): "
             )
 
             credentials = ':'.join((username, password))
@@ -640,13 +636,13 @@ def get_compiled_table_name(engine, schema, table_name):
 
     Examples:
         >>> from sqlalchemy import create_engine
-        >>> get_compiled_table_name(create_engine('greenplum://u:p@s'), 'a_schema', 'a_table') == six.text_type('a_schema.a_table')
+        >>> get_compiled_table_name(create_engine('greenplum://u:p@s'), 'a_schema', 'a_table') == str('a_schema.a_table')
         True
-        >>> get_compiled_table_name(create_engine('greenplum://u:p@s'), 'a_schema-1', 'a_table-1') == six.text_type('"a_schema-1"."a_table-1"')
+        >>> get_compiled_table_name(create_engine('greenplum://u:p@s'), 'a_schema-1', 'a_table-1') == str('"a_schema-1"."a_table-1"')
         True
-        >>> get_compiled_table_name(create_engine('greenplum://u:p@s'), None, 'a_table-1') == six.text_type('"a_table-1"')
+        >>> get_compiled_table_name(create_engine('greenplum://u:p@s'), None, 'a_table-1') == str('"a_table-1"')
         True
-        >>> get_compiled_table_name(create_engine('greenplum://u:p@s'), '', 'a_table-1') == six.text_type('"a_table-1"')
+        >>> get_compiled_table_name(create_engine('greenplum://u:p@s'), '', 'a_table-1') == str('"a_table-1"')
         True
     """
     target = sqlalchemy.Table(table_name, sqlalchemy.MetaData(), schema=schema)

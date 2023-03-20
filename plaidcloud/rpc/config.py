@@ -4,8 +4,6 @@
 Model Config
 Load configuration files and provide access to their settings.
 """
-from __future__ import absolute_import
-from __future__ import print_function
 
 import os
 from pathlib import Path
@@ -16,7 +14,6 @@ import subprocess
 from urllib.parse import urlparse
 import yaml
 import glob
-import six
 
 from plaidcloud.rpc.file_helpers import makedirs
 
@@ -295,7 +292,7 @@ class PlaidConfig(object):
                 # Need to perform a directed search upward to find the first plaid.conf file
                 self.cfg_path = str(find_plaid_conf())
 
-            if not isinstance(self.cfg_path, six.string_types):
+            if not isinstance(self.cfg_path, str):
                 raise Exception('ERROR: No RPC connection configuration available.')
 
             if not os.path.exists(self.cfg_path):
@@ -327,11 +324,11 @@ class PlaidConfig(object):
             self.auth_code = self.config.get('auth_code') if not self.auth_token else None
 
             if all([
-                isinstance(self._project_id, six.string_types),
-                isinstance(self.workspace_id, six.integer_types)
+                isinstance(self._project_id, str),
+                isinstance(self.workspace_id, int)
             ]):
                 os.environ['__PLAID_PROJECT_ID__'] = self._project_id
-                os.environ['__PLAID_WORKSPACE_ID__'] = six.text_type(self.workspace_id)
+                os.environ['__PLAID_WORKSPACE_ID__'] = str(self.workspace_id)
                 os.environ['__PLAID_WORKSPACE_UUID__'] = self.workspace_uuid
                 os.environ['__PLAID_WORKFLOW_ID__'] = self._workflow_id
                 os.environ['__PLAID_STEP_ID__'] = self._step_id
@@ -408,7 +405,7 @@ class PlaidConfig(object):
 
     def path(self, path_id):
         result = self.paths[path_id]
-        if isinstance(result, six.string_types):
+        if isinstance(result, str):
             class Default(dict):
                 def __missing__(self, key):
                     return '{' + key + '}'

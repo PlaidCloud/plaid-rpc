@@ -2,11 +2,9 @@
 # coding=utf-8
 
 """Sets up a listening server to wait for incoming auth code redirects"""
-from __future__ import absolute_import
-
-from six.moves.urllib_parse import urlparse, parse_qs
-from six.moves.BaseHTTPServer import BaseHTTPRequestHandler
-from six.moves.socketserver import TCPServer
+from urllib.parse import urlparse, parse_qs
+from http.server import BaseHTTPRequestHandler
+from socketserver import TCPServer
 
 
 class AuthCodeListener(BaseHTTPRequestHandler):

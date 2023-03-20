@@ -2,7 +2,6 @@
 # coding=utf-8
 """Contains RateLimiter."""
 
-from __future__ import absolute_import
 import time
 
 __author__ = "Brian McFadden"

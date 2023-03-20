@@ -4,24 +4,19 @@
 """Basic class that allows for a handler that wraps the plaid RPC API.
    Gracefully handles oauth token generation."""
 
-from __future__ import absolute_import
-
-import os
 from urllib.parse import urlencode
 import yaml
-import orjson as json
 import requests
 import uuid
 from concurrent.futures import ThreadPoolExecutor
 
-import six
 from plaidcloud.rpc.connection.jsonrpc import SimpleRPC
 from plaidcloud.rpc.remote import listener
 from plaidcloud.rpc.config import PlaidConfig
 
 __author__ = 'Charlie Laymon'
 __maintainer__ = 'Charlie Laymon <charlie.laymon@tartansolutions.com>'
-__copyright__ = '© Copyright 2019-2020, Tartan Solutions, Inc'
+__copyright__ = '© Copyright 2019-2023, Tartan Solutions, Inc'
 __license__ = 'Apache 2.0'
 
 
