@@ -5,6 +5,7 @@ from sqlalchemy import (
     BIGINT, INTEGER, SMALLINT, TEXT, Boolean, TIMESTAMP, Interval, Date, Time
 )
 from sqlalchemy.sql.sqltypes import LargeBinary
+from sqlalchemy.dialects.postgresql import UUID, JSONB
 
 import messytables
 
@@ -51,10 +52,10 @@ _ANALYZE_TYPE = regex_map({
         r'^byte.*': 'largebinary',  # Any byte string goes to large binary
         r'^(?:var|large)?binary$': 'largebinary',  # binary + varbinary + largebinary
         r'^xml$': 'text',
-        r'^uuid$': 'text',
+        r'^uuid$': 'uuid',
         r'^(?:small)?money$': 'numeric',  # money + smallmoney
         r'^real$': 'numeric',
-        r'^json$': 'text',
+        r'^json.*$': 'json',
         r'^cidr$': 'text',
         r'^inet$': 'text',
         r'^macaddr$': 'text',
@@ -132,6 +133,10 @@ def analyze_type(dtype):
         'text'
         >>> analyze_type('smallint')
         'smallint'
+        >>> analyze_type('jsonb')
+        'json'
+        >>> analyze_type('uuid')
+        'uuid'
     """
     key = str(dtype).lower()
 
@@ -232,10 +237,10 @@ _sqlalchemy_from_dtype = regex_map({
     r'^largebinary': LargeBinary,
     r'^byte.*': LargeBinary,
     r'^xml$': PlaidUnicode(4000),
-    r'^uuid$': PlaidUnicode(36),
+    r'^uuid$': UUID,
     r'^money$': PlaidNumeric,
     r'^real$': PlaidNumeric,
-    r'^json$': PlaidUnicode(4000),
+    r'^json$': JSONB,
     r'^cidr$': PlaidUnicode(100),
     r'^inet$': PlaidUnicode(100),
     r'^macaddr$': PlaidUnicode(100),
@@ -263,6 +268,10 @@ def sqlalchemy_from_dtype(dtype):
         <class 'plaidcloud.rpc.database.PlaidTimestamp'>
         >>> sqlalchemy_from_dtype('date')
         <class 'sqlalchemy.sql.sqltypes.Date'>
+        >>> sqlalchemy_from_dtype('json')
+        <class 'sqlalchemy.dialects.postgresql.json.JSONB'>
+        >>> sqlalchemy_from_dtype('uuid')
+        <class 'sqlalchemy.dialects.postgresql.base.UUID'>
     """
     key = str(dtype).lower()
     return _sqlalchemy_from_dtype(key)
