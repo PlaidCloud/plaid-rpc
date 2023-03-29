@@ -236,7 +236,7 @@ _sqlalchemy_from_dtype = regex_map({
     r'^largebinary': LargeBinary,
     r'^byte.*': LargeBinary,
     r'^xml$': PlaidUnicode(4000),
-    r'^uuid$': UUID,
+    r'^(?:generated_)?uuid$': UUID,
     r'^money$': PlaidNumeric,
     r'^real$': PlaidNumeric,
     r'^json$': JSONB,
