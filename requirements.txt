@@ -13,7 +13,7 @@ requests
 requests_futures
 setuptools
 orjson
-sqlalchemy~=1.4
+sqlalchemy
 sqlalchemy-greenplum
 sqlalchemy-hana
 toolz
