@@ -16,7 +16,7 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v3
       - name: Install dependencies
-        run: pip install -r requirements.txt; pip install -q pylint==2.15.5; pip install -q liccheck;
+        run: pip install -r requirements.txt; pip install -q pylint==${{ secrets.PYLINT_VERSION }}; pip install -q liccheck;
       - name: License Checker
         uses: andersy005/gh-action-py-liccheck@main
         with:
