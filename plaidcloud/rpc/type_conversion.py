@@ -88,6 +88,7 @@ _PANDAS_DTYPE_FROM_SQL = regex_map({
     r'^time\b.*': 'datetime64[s]',
     r'^datetime.*': 'datetime64[s]',
     r'^largebinary$': 'object',
+    r'^json*$': 'object',
 })
 
 _PYTHON_DATESTRING_FROM_SQLALCHEMY = {
@@ -233,6 +234,8 @@ _sqlalchemy_from_dtype = regex_map({
     r'^tab_name$': PlaidUnicode(4000),
     r'^last_modified': PlaidTimestamp,
     r'^source_row_number$': INTEGER,
+    r'^source_table_name$': PlaidUnicode(4000),
+    ##
     r'^largebinary': LargeBinary,
     r'^byte.*': LargeBinary,
     r'^xml$': PlaidUnicode(4000),
