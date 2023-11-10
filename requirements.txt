@@ -2,7 +2,6 @@ bleach
 comtypes;platform_system=="Windows"
 messytables@git+https://github.com/PlaidCloud/messytables.git@master#egg=messytables
 minimock
-nose
 packaging
 psycopg2-binary
 pyjwt
