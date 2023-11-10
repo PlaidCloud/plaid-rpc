@@ -567,7 +567,7 @@ def is_dialect_postgresql_based(dialect):
         >>> from sqlalchemy.dialects.postgresql.psycopg2 import PGDialect_psycopg2
         >>> is_dialect_postgresql_based(PGDialect())
         True
-        >>> is_dialect_postgresql_based(HANABaseDialect())
+        >>> is_dialect_postgresql_based(HANAHDBCLIDialect())
         False
         >>> is_dialect_postgresql_based(PGDialect_psycopg2())
         True
@@ -590,7 +590,7 @@ def is_dialect_greenplum_based(dialect):
         >>> from sqlalchemy.dialects.postgresql.psycopg2 import PGDialect_psycopg2
         >>> is_dialect_greenplum_based(PGDialect())
         False
-        >>> is_dialect_greenplum_based(HANABaseDialect())
+        >>> is_dialect_greenplum_based(HANAHDBCLIDialect())
         False
         >>> is_dialect_greenplum_based(PGDialect_psycopg2())
         False
@@ -614,7 +614,7 @@ def is_dialect_hana_based(dialect):
         >>> is_dialect_hana_based(HANAHDBCLIDialect())
         True
         >>> is_dialect_hana_based(PGDialect())
-        True
+        False
         >>> is_dialect_hana_based(GreenplumDialect())
         False
     """
