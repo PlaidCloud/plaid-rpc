@@ -1,0 +1,8 @@
+[build-system]
+requires = ["setuptools >= 40.0.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.black]
+line-length = 125
+target-version = ['py311']
+skip-string-normalization = true
