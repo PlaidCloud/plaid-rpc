@@ -20,7 +20,7 @@ import sqlalchemy
 from sqlalchemy.dialects.postgresql.base import PGDialect
 from sqlalchemy.dialects.mssql.base import MSDialect
 from sqlalchemy.types import TypeDecorator, DateTime, Unicode, CHAR, TEXT, NVARCHAR, UnicodeText, NUMERIC, TIMESTAMP, DATETIME
-from sqlalchemy_hana.dialect import HANABaseDialect
+from sqlalchemy_hana.dialect import HANAHDBCLIDialect
 from sqlalchemy_greenplum.dialect import GreenplumDialect
 
 from plaidcloud.rpc import config
@@ -610,17 +610,15 @@ def is_dialect_hana_based(dialect):
         bool: If the dialect is a descendant of the HANA base dialect
 
     Examples:
-        >>> from sqlalchemy_hana.dialect import HANAHDBCLIDialect, HANAPyHDBDialect
+        >>> from sqlalchemy_hana.dialect import HANAHDBCLIDialect
         >>> is_dialect_hana_based(HANAHDBCLIDialect())
         True
         >>> is_dialect_hana_based(PGDialect())
-        False
-        >>> is_dialect_hana_based(HANAPyHDBDialect())
         True
         >>> is_dialect_hana_based(GreenplumDialect())
         False
     """
-    return isinstance(dialect, HANABaseDialect)
+    return isinstance(dialect, HANAHDBCLIDialect)
 
 
 def get_compiled_table_name(engine, schema, table_name):
