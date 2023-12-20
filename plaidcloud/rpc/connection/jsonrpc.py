@@ -30,6 +30,7 @@ __license__ = 'Apache 2.0'
 STREAM_ENDPOINTS = {
     'analyze/query/download_csv',
     'analyze/query/download_dataframe',
+    'document/view/download_stream',
 }
 
 download_folder = os.path.join(tempfile.gettempdir(), "plaid/download")
