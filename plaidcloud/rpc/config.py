@@ -463,6 +463,13 @@ class PlaidXLConfig(PlaidConfig):
         self.is_local = False
         super().__init__(False)
 
+    @property
+    def project_id(self):
+        # Override, do not raise exception if project is missing
+        # if not self._project_id:
+        #     raise Exception('Project Id has not been set')
+        return self._project_id
+
 
 def find_plaid_conf(path=None):
     """Finds plaid.conf by searching upwards for first plaid.conf it finds"""

@@ -159,6 +159,6 @@ class PlaidXLConnect(SimpleRPC, PlaidXLConfig):
         [{'SELECT 1': 1}]
     """
 
-    def __init__(self, *, rpc_uri: str, auth_token: str, workspace_id: str, project_id: str=''):
+    def __init__(self, *, rpc_uri: str, auth_token: str, workspace_id: str = '', project_id: str = ''):
         PlaidXLConfig.__init__(self, rpc_uri=rpc_uri, auth_token=auth_token, workspace_id=workspace_id, project_id=project_id)
         SimpleRPC.__init__(self, self.auth_token, uri=self.rpc_uri, workspace=self.workspace_id)
