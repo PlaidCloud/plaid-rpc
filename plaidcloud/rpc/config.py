@@ -190,7 +190,7 @@ def setup_scaffolding(config_path='', file_location=''):
     set_runtime_options()
 
 
-class PlaidConfig(object):
+class PlaidConfig:
     _C = {}
     _working_user = os.path.expanduser('~')
     # Members for local and remote
@@ -219,7 +219,7 @@ class PlaidConfig(object):
     cache_locally = False
     write_from_local = False
 
-    def __init__(self, config_path, working_user=''):
+    def __init__(self, config_path: [str, False], working_user=''):
         """
         Configuration for running UDFs within Plaid
 
@@ -386,6 +386,9 @@ class PlaidConfig(object):
             except ImportError:
                 logger.info('Not setting pandas related option - pandas is not installed.')
 
+        if config_path is False: # allow to call super from PlaidXLConfig without effect
+            return
+
         if _check_environment_variables():
             _init_plaidcloud_config()
         else:
@@ -445,6 +448,20 @@ class PlaidConfig(object):
         if not self._step_id:
             raise Exception('Step Id has not been set')
         return self._step_id
+
+
+class PlaidXLConfig(PlaidConfig):
+    def __init__(self, *, rpc_uri: str, auth_token: str, workspace_id: str, project_id: str):
+        self.rpc_uri = rpc_uri
+        # self.auth_uri = os.environ.get('__PLAID_AUTH_URI__')
+        self.auth_token = auth_token
+        self._project_id = project_id
+        # self.workspace_id = int(os.environ['__PLAID_WORKSPACE_ID__'])
+        self.workspace_uuid = workspace_id
+        # self._workflow_id = os.environ['__PLAID_WORKFLOW_ID__']
+        # self._step_id = os.environ['__PLAID_STEP_ID__']
+        self.is_local = False
+        super().__init__(False)
 
 
 def find_plaid_conf(path=None):
