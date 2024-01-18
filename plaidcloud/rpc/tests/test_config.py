@@ -18,7 +18,7 @@ class TestConfigWithNoPaths(unittest.TestCase):
     """These tests validate all aspects of the PlaidConfig object"""
 
     def setUp(self):
-        self.config = PlaidConfig('plaidcloud/rpc/tests/.plaid/plaid.conf')
+        self.config = PlaidConfig(config_path='plaidcloud/rpc/tests/.plaid/plaid.conf')
 
     def test_paths_is_empty(self):
         assert self.config.paths == {}

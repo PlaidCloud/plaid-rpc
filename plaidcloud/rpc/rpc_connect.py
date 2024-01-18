@@ -12,7 +12,7 @@ from concurrent.futures import ThreadPoolExecutor
 
 from plaidcloud.rpc.connection.jsonrpc import SimpleRPC
 from plaidcloud.rpc.remote import listener
-from plaidcloud.rpc.config import PlaidConfig
+from plaidcloud.rpc.config import PlaidConfig, PlaidXLConfig
 
 __author__ = 'Charlie Laymon'
 __maintainer__ = 'Charlie Laymon <charlie.laymon@tartansolutions.com>'
@@ -146,3 +146,19 @@ class Connect(SimpleRPC, PlaidConfig):
     def ready(self):
         """Call SimpleRPC __init__ once we have an auth token"""
         SimpleRPC.__init__(self, self.auth_token, uri=self.rpc_uri, workspace=self.workspace_id, check_allow_transmit=self.allow_transmit_func)
+
+
+class PlaidXLConnect(SimpleRPC, PlaidXLConfig):
+    """Connection class for PlaidXL that takes params in the constructor
+
+    Also wraps a configuration object so that configuration is available within the same object
+
+    Example:
+        > pxlrpc = PlaidXLConnect(rpc_uri='https://127.0.0.1/json-rpc', auth_token='mytoken', workspace_id='sometenantid')
+        > pxlrpc.analyze.query.get_dataframe_from_select(project_id=project_id, query='SELECT 1;')
+        [{'SELECT 1': 1}]
+    """
+
+    def __init__(self, *, rpc_uri: str, auth_token: str, workspace_id: str, project_id: str=''):
+        PlaidXLConfig.__init__(self, rpc_uri=rpc_uri, auth_token=auth_token, workspace_id=workspace_id, project_id=project_id)
+        SimpleRPC.__init__(self, self.auth_token, uri=self.rpc_uri, workspace=self.workspace_id)
