@@ -19,14 +19,16 @@ import unicodecsv as csv
 import sqlalchemy
 from sqlalchemy.dialects.postgresql.base import PGDialect
 from sqlalchemy.dialects.mssql.base import MSDialect
+from sqlalchemy.dialects.mysql.base import MySQLDialect
 from sqlalchemy.types import TypeDecorator, DateTime, Unicode, CHAR, TEXT, NVARCHAR, UnicodeText, NUMERIC, TIMESTAMP, DATETIME
 from sqlalchemy_hana.dialect import HANAHDBCLIDialect
 from sqlalchemy_greenplum.dialect import GreenplumDialect
+from starrocks.dialect import StarRocksDialect
 
 from plaidcloud.rpc import config
 
 __author__ = 'Paul Morel'
-__copyright__ = 'Copyright 2010-2023, Tartan Solutions, Inc'
+__copyright__ = 'Copyright 2010-2024, Tartan Solutions, Inc'
 __credits__ = ['Paul Morel']
 __license__ = 'Apache 2.0'
 __maintainer__ = 'Paul Morel'
@@ -550,7 +552,17 @@ def is_dialect_sql_server_based(dialect):
         dialect (sqlalchemy.engine.interfaces.Dialect): The dialect to test
 
     Returns:
-        bool: If the dialect is a descendant of the SQL Server dialect"""
+        bool: If the dialect is a descendant of the SQL Server dialect
+
+    Examples:
+        >>> is_dialect_sql_server_based(MSDialect())
+        True
+        >>> is_dialect_sql_server_based(HANAHDBCLIDialect())
+        False
+        >>> is_dialect_sql_server_based(GreenplumDialect())
+        False
+    """
+
     return isinstance(dialect, MSDialect)
 
 
@@ -610,7 +622,6 @@ def is_dialect_hana_based(dialect):
         bool: If the dialect is a descendant of the HANA base dialect
 
     Examples:
-        >>> from sqlalchemy_hana.dialect import HANAHDBCLIDialect
         >>> is_dialect_hana_based(HANAHDBCLIDialect())
         True
         >>> is_dialect_hana_based(PGDialect())
@@ -619,6 +630,46 @@ def is_dialect_hana_based(dialect):
         False
     """
     return isinstance(dialect, HANAHDBCLIDialect)
+
+
+def is_dialect_mysql_based(dialect):
+    """Is a dialect derived from underlying MySQL dialect
+
+    Args:
+        dialect (sqlalchemy.engine.interfaces.Dialect): The dialect to test
+
+    Returns:
+        bool: If the dialect is a descendant of the MySQL base dialect
+
+    Examples:
+        >>> is_dialect_mysql_based(MySQLDialect())
+        True
+        >>> is_dialect_mysql_based(StarRocksDialect())
+        True
+        >>> is_dialect_mysql_based(GreenplumDialect())
+        False
+    """
+    return isinstance(dialect, MySQLDialect)
+
+
+def is_dialect_starrocks_based(dialect):
+    """Is a dialect derived from underlying Starrocks dialect
+
+    Args:
+        dialect (sqlalchemy.engine.interfaces.Dialect): The dialect to test
+
+    Returns:
+        bool: If the dialect is a descendant of the StarRocks base dialect
+
+    Examples:
+        >>> is_dialect_starrocks_based(MySQLDialect())
+        False
+        >>> is_dialect_starrocks_based(StarRocksDialect())
+        True
+        >>> is_dialect_starrocks_based(GreenplumDialect())
+        False
+    """
+    return isinstance(dialect, StarRocksDialect)
 
 
 def get_compiled_table_name(engine, schema, table_name):
