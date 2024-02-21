@@ -1,12 +1,9 @@
 bleach
 comtypes;platform_system=="Windows"
 messytables@git+https://github.com/PlaidCloud/messytables.git@master#egg=messytables
-minimock
 packaging
 psycopg2-binary
 pyjwt
-pytest
-pytest-cov
 pyyaml
 requests
 requests_futures
@@ -15,6 +12,7 @@ orjson
 sqlalchemy~=1.4
 sqlalchemy-greenplum
 sqlalchemy-hana
+starrocks
 toolz
 unicodecsv
 urllib3

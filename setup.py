@@ -6,8 +6,6 @@ test_deps = [
     'minimock',
     'pytest-cov',
     'pytest-runner',
-    'hdbcli',
-    'pyhdb',
 ]
 
 extras = {
