@@ -24,6 +24,7 @@ from sqlalchemy.types import TypeDecorator, DateTime, Unicode, CHAR, TEXT, NVARC
 from sqlalchemy_hana.dialect import HANAHDBCLIDialect
 from sqlalchemy_greenplum.dialect import GreenplumDialect
 from starrocks.dialect import StarRocksDialect
+from databend_sqlalchemy.databend_dialect import DatabendDialect
 
 from plaidcloud.rpc import config
 
@@ -166,7 +167,7 @@ class PlaidNumeric(TypeDecorator):
             dialect (Dialect): SQLAlchemy dialect
         Returns:
             str: Type Descriptor"""
-        if is_dialect_sql_server_based(dialect):
+        if is_dialect_sql_server_based(dialect) or is_dialect_mysql_based(dialect):
             return dialect.type_descriptor(NUMERIC(38, 10))
         else:
             return self.impl
@@ -670,6 +671,26 @@ def is_dialect_starrocks_based(dialect):
         False
     """
     return isinstance(dialect, StarRocksDialect)
+
+
+def is_dialect_databend_based(dialect):
+    """Is a dialect derived from underlying Databend dialect
+
+    Args:
+        dialect (sqlalchemy.engine.interfaces.Dialect): The dialect to test
+
+    Returns:
+        bool: If the dialect is a descendant of the StarRocks base dialect
+
+    Examples:
+        >>> is_dialect_databend_based(MySQLDialect())
+        False
+        >>> is_dialect_databend_based(DatabendDialect())
+        True
+        >>> is_dialect_databend_based(GreenplumDialect())
+        False
+    """
+    return isinstance(dialect, DatabendDialect)
 
 
 def get_compiled_table_name(engine, schema, table_name):
