@@ -91,7 +91,7 @@ _PANDAS_DTYPE_FROM_SQL = regex_map({
     r'^json*$': 'object',
 })
 
-_PYTHON_DATESTRING_FROM_SQLALCHEMY = {
+_PYTHON_DATETIMESTRING_FROM_SQLALCHEMY = {
     'YYYY-MM-DD"T"HH24:MI:SS': '%Y-%m-%dT%H:%M:%S',
     'YYYY-MM-DDTHH24:MI:SS': '%Y-%m-%dT%H:%M:%S',
     'YYYY-MM-DD"T"HH:MI:SS': '%Y-%m-%dT%I:%M:%S',
@@ -106,6 +106,22 @@ _PYTHON_DATESTRING_FROM_SQLALCHEMY = {
     'DD MON YYYY HH:MI:SS': '%d %b %Y %I:%M:%S %p',
     'YYYYMMDD HH24:MI:SS': '%Y%m%d %H:%M:%S',
     'YYYYMMDD HH:MI:SS': '%Y%m%d %I:%M:%S',
+}
+_PYTHON_DATESTRING_FROM_SQLALCHEMY = {
+    'YYYY-MM-DD"T"HH24:MI:SS': '%Y-%m-%d',
+    'YYYY-MM-DDTHH24:MI:SS': '%Y-%m-%d',
+    'YYYY-MM-DD"T"HH:MI:SS': '%Y-%m-%d',
+    'YYYY-MM-DDTHH:MI:SS': '%Y-%m-%d',
+    'YYYY-MM-DD HH24:MI:SS': '%Y-%m-%d',
+    'YYYY-MM-DD HH:MI:SS': '%Y-%m-%d',
+    'MM/DD/YYYY HH24:MI:SS': '%m/%d/%Y',
+    'MM/DD/YYYY HH:MI:SS': '%m/%d/%Y',
+    'DD/MM/YYYY HH24:MI:SS': '%d/%m/%Y',
+    'DD/MM/YYYY HH:MI:SS': '%d/%m/%Y',
+    'DD MON YYYY HH24:MI:SS': '%d %b %Y',
+    'DD MON YYYY HH:MI:SS': '%d %b %Y',
+    'YYYYMMDD HH24:MI:SS': '%Y%m%d',
+    'YYYYMMDD HH:MI:SS': '%Y%m%d',
 }
 
 
@@ -156,17 +172,29 @@ def analyze_type(dtype):
         ).format(dtype))
 
 
-def python_date_from_sql(datestring):
+def python_date_from_sql(date_string, date_only=False):
     """ Translates a SQL date format string to a python
-        date format string compatable with strftime
+        date format string compatible with strftime
 
     Args:
-        datestring (str): The SQL date format string
+        date_string (str): The SQL date format string
 
     Returns:
-        str: The python equivalent of `datestring`
+        str: The python equivalent of `date_string`
+
+    Examples:
+        >>> python_date_from_sql('YYYY-MM-DD"T"HH24:MI:SS')
+        '%Y-%m-%dT%H:%M:%S'
+        >>> python_date_from_sql('DD/MM/YYYY HH:MI:SS', False)
+        '%d/%m/%Y %I:%M:%S %p'
+        >>> python_date_from_sql('YYYY-MM-DD"T"HH24:MI:SS', True)
+        '%Y-%m-%d'
+        >>> python_date_from_sql('DD/MM/YYYY HH:MI:SS', True)
+        '%d/%m/%Y'
     """
-    return _PYTHON_DATESTRING_FROM_SQLALCHEMY[datestring]
+    if date_only:
+        return _PYTHON_DATESTRING_FROM_SQLALCHEMY[date_string]
+    return _PYTHON_DATETIMESTRING_FROM_SQLALCHEMY[date_string]
 
 
 def pandas_dtype_from_sql(sql):
