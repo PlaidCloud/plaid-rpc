@@ -99,7 +99,8 @@ def http_json_rpc(token=None, uri=None, verify_ssl=None, json_data=None, workspa
                     response.raise_for_status()
                     try:
                         result = response.json()
-                        return result
+                        if isinstance(result, dict):
+                            return result
                     except Exception:  # JSONDecodeError: Should be this, but which library? json or simplejson - depends what is installed
                         pass
                     for chunk in response.iter_content(chunk_size=None):
