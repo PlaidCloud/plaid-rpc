@@ -18,9 +18,11 @@ import unicodecsv as csv
 
 import sqlalchemy
 from sqlalchemy.dialects.postgresql.base import PGDialect
+from sqlalchemy.dialects.postgresql.json import JSONB
 from sqlalchemy.dialects.mssql.base import MSDialect
 from sqlalchemy.dialects.mysql.base import MySQLDialect
-from sqlalchemy.types import TypeDecorator, DateTime, Unicode, CHAR, TEXT, NVARCHAR, UnicodeText, NUMERIC, TIMESTAMP, DATETIME
+from sqlalchemy.types import (TypeDecorator, DateTime, Unicode, CHAR, TEXT, NVARCHAR,
+                              UnicodeText, NUMERIC, TIMESTAMP, DATETIME, JSON)
 from sqlalchemy_hana.dialect import HANAHDBCLIDialect
 from sqlalchemy_greenplum.dialect import GreenplumDialect
 from starrocks.dialect import StarRocksDialect
@@ -192,8 +194,31 @@ class PlaidUnicode(TypeDecorator):
         """
         if is_dialect_postgresql_based(dialect):
             return dialect.type_descriptor(UnicodeText)
-        else:
-            return self.impl
+
+        return self.impl
+
+class PlaidJSON(TypeDecorator):
+    """JSON type that implements as JSONB on Postgresql based environments
+
+    Note:
+        Uses Postgresql's JSONB type
+    """
+    impl = JSON
+    cache_ok = True
+
+    def load_dialect_impl(self, dialect):
+        """Loads the dialect implementation
+        Note:
+            Implement as JSONB in Greenplum + Postgresql
+        Args:
+            dialect (Dialect): SQLAlchemy dialect
+        Returns:
+            str: Type Descriptor
+        """
+        if is_dialect_postgresql_based(dialect):
+            return dialect.type_descriptor(JSONB)
+
+        return self.impl
 
 
 def text_repr(val):
