@@ -144,7 +144,6 @@ class RPCRetry(Retry):
             status_forcelist=[401, 500, 502, 504],
             backoff_factor=0.1,
         ))
-
         if 'connect' not in kwargs:
             kwargs['connect'] = 5
         super(RPCRetry, self).__init__(*args, **kwargs)
@@ -161,6 +160,7 @@ class RPCRetry(Retry):
         return True
 
     def increment(self, *args, **kwargs):
+        print(f'Hit Retry, Request History Looks Like: {self.history}')
         if not self.allow_transmit:
             raise Exception('No more retries, RPC method has been cancelled')
         return super(RPCRetry, self).increment(*args, **kwargs)
@@ -203,6 +203,7 @@ class SimpleRPC(PlainRPCCommon):
                 if response.get('ok'):
                     return response['result']
                 else:
+                    print(f'Retry Object History: {retry.}')
                     error = response['error']
                     if error.get('code') == WARNING_CODE:
                         raise Warning(error.get('message'))
