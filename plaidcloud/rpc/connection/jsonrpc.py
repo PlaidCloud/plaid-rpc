@@ -135,23 +135,16 @@ def http_json_rpc(token=None, uri=None, verify_ssl=None, json_data=None, workspa
 class RPCRetry(Retry):
     def __init__(self, *args, check_allow_transmit=None, **kwargs):
         """
-
         Args:
             check_allow_transmit (callable, optional): Method to call to check if retries are still to be made
                 This can be used to prevent retry of RPC methods once a workflow has been cancelled and the RPC fails
         """
-        if version.parse(urllib3.__version__) >= version.parse("1.26.0"):
-            kwargs.update(dict(
-                allowed_methods=['POST'],
-                status_forcelist=[500, 502, 504],
-                backoff_factor=0.1,
-            ))
-        else:
-            kwargs.update(dict(
-                method_whitelist=['POST'],
-                status_forcelist=[500, 502, 504],
-                backoff_factor=0.1,
-            ))
+        kwargs.update(dict(
+            allowed_methods=['POST'],
+            status_forcelist=[401, 500, 502, 504],
+            backoff_factor=0.1,
+        ))
+
         if 'connect' not in kwargs:
             kwargs['connect'] = 5
         super(RPCRetry, self).__init__(*args, **kwargs)
