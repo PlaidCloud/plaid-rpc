@@ -8,7 +8,6 @@ import urllib3.exceptions
 import requests
 from requests.adapters import HTTPAdapter
 from requests_futures.sessions import FuturesSession
-import urllib3.request
 from urllib3.util.retry import Retry
 import orjson as json
 from packaging import version
