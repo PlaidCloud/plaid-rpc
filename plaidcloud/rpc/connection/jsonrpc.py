@@ -160,12 +160,12 @@ class RPCRetry(Retry):
         return True
 
     def increment(self, *args, **kwargs):
-        print(f'Hit Retry, Request History Looks Like: {self.history}')
+        if self.history:
+            print(f'Hit Retry, Request History Looks Like: {self.history}')
+            print(f'Error Status and Content: {self.history[-1].status}: {self.history[-1].error}')
         if not self.allow_transmit:
             raise Exception('No more retries, RPC method has been cancelled')
         return super(RPCRetry, self).increment(*args, **kwargs)
-
-
 class SimpleRPC(PlainRPCCommon):
     """Call remote rpc methods with a dot based interface, almost as if they
     were simply functions in modules.
