@@ -8,7 +8,6 @@ import urllib3.exceptions
 import requests
 from requests.adapters import HTTPAdapter
 from requests_futures.sessions import FuturesSession
-import urllib3.request
 from urllib3.util.retry import Retry
 import orjson as json
 from packaging import version
@@ -164,6 +163,12 @@ class RPCRetry(Retry):
         if self.history:
             print(f'Hit Retry, Request History Looks Like: {self.history}')
             print(f'Error Status and Content: {self.history[-1].status}: {self.history[-1].error}')
+            print(
+                f'Expanded Error Object:\n'
+                f'\tHost: {self.history[-1].error.host}\n'
+                f'\tPort: {self.history[-1].error.port}\n'
+                f'\tSource Address: {self.history[-1].error.source_address}\n'
+            )
         if not self.allow_transmit:
             raise Exception('No more retries, RPC method has been cancelled')
         return super(RPCRetry, self).increment(*args, **kwargs)
