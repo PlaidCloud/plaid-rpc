@@ -3,11 +3,13 @@
 
 from typing import Union
 import requests
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 import jwt
 from datetime import datetime
 
 __author__ = 'Paul Morel'
-__copyright__ = 'Copyright 2010-2021, Tartan Solutions, Inc'
+__copyright__ = 'Copyright 2010-2024, Tartan Solutions, Inc'
 __credits__ = ['Paul Morel']
 __license__ = 'Apache 2.0'
 __maintainer__ = 'Paul Morel'
@@ -32,7 +34,10 @@ def token_is_expired(token: str) -> bool:
         return False
 
 
-def refresh_token(grant_type: str, client_id: str, refresh_token: str, uri: str="https://plaidcloud.com/", realm: str="PlaidCloud", proxy_settings: Union[dict, None]=None):
+def refresh_token(grant_type: str, client_id: str, refresh_token: str, uri: str = "https://auth.plaidcloud.com/",
+                  realm: str = "PlaidCloud", proxy_settings: Union[dict, None] = None, verify: bool = True,
+                  retry: bool = True,
+                  ):
     """Refreshes a token and returns a token response
     
     Args:
@@ -42,6 +47,8 @@ def refresh_token(grant_type: str, client_id: str, refresh_token: str, uri: str=
         uri (str): Root uri to authenticate against, with trailing slash. Will be appended with keycloak's route
         realm (str): The realm used to generate the token
         proxy_settings (dict): Proxy settings to pass to requests
+        verify (bool, optional): Verify SSL
+        retry (bool, optional): Whether to retry requests
 
     Returns:
         dict: Standard auth token response. The most relevant contents are:
@@ -51,7 +58,7 @@ def refresh_token(grant_type: str, client_id: str, refresh_token: str, uri: str=
 
     headers = {
         "Content-Type": "application/x-www-form-urlencoded"
-    },
+    }
     payload = {
         "grant_type": grant_type,
         "client_id": client_id,
@@ -60,12 +67,25 @@ def refresh_token(grant_type: str, client_id: str, refresh_token: str, uri: str=
 
     uri = uri.rstrip('/')
     token_url = f"{uri}/realms/{realm}/protocol/openid-connect/token"
-    token_response = requests.post(token_url, headers=headers, json=payload, proxies=proxy_settings)
-    token_response.raise_for_status()
-    return token_response.json()
+    with requests.Session() as session:
+        if not retry:
+            retry = 0
+        else:
+            retry = Retry()
+        adapter = HTTPAdapter(max_retries=retry)
+        session.mount('http://', adapter)
+        session.mount('https://', adapter)
+        response = session.post(
+            token_url, headers=headers, json=payload, proxies=proxy_settings, verify=verify, timeout=(5,5),
+        )
+        response.raise_for_status()
+        return response.json()
 
 
-def create_oauth_token(grant_type, client_id, client_secret, scopes='openid', username=None, password=None, uri='https://plaidcloud.com/', realm="PlaidCloud", proxy_settings=None, verify=True):
+def create_oauth_token(grant_type, client_id, client_secret, scopes='openid', username=None, password=None,
+                       uri='https://auth.plaidcloud.com/', realm="PlaidCloud", proxy_settings=None, verify=True,
+                       retry=True,
+                       ):
     """Attempts to create an Oauth2 auth token using the provided data
 
     This is designed primarily for password-type grants, but should work for client credentials as well.
@@ -82,6 +102,8 @@ def create_oauth_token(grant_type, client_id, client_secret, scopes='openid', us
         uri (str, optional): The plaidcloud instance to request a token from. Defaults to prod
         realm (str, optional): The keycloak realm to use.
         proxy_settings (dict, optional): Proxy settings to pass to requests.post
+        verify (bool, optional): Verify SSL
+        retry (bool, optional): Whether to retry requests
 
     Returns:
         dict: The response from PlaidCloud after requesting a token.
@@ -107,7 +129,6 @@ def create_oauth_token(grant_type, client_id, client_secret, scopes='openid', us
             "client_id": client_id,
             "client_secret": client_secret,
         }
-        token = requests.post(token_url, headers=headers, data=payload, proxies=proxy_settings, verify=verify)
     else:
         payload = {
             "grant_type": "password",
@@ -117,10 +138,23 @@ def create_oauth_token(grant_type, client_id, client_secret, scopes='openid', us
             "username": username,
             "password": password,
         }
-        token = requests.post(token_url, headers=headers, data=payload, proxies=proxy_settings, verify=verify)
-    token.raise_for_status()
-    token = token.json()
-    return token
+
+    with requests.Session() as session:
+        if not retry:
+            retry = 0
+        else:
+            retry = Retry()
+        adapter = HTTPAdapter(max_retries=retry)
+        session.mount('http://', adapter)
+        session.mount('https://', adapter)
+
+        response = session.post(
+            token_url, headers=headers, data=payload, proxies=proxy_settings, verify=verify, timeout=(5, 5),
+        )
+        response.raise_for_status()
+        token = response.json()
+        return token
+
 
 
 def main():
