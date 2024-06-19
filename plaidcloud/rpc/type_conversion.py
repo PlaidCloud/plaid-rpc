@@ -91,38 +91,92 @@ _PANDAS_DTYPE_FROM_SQL = regex_map({
     r'^json*$': 'object',
 })
 
-_PYTHON_DATETIMESTRING_FROM_SQLALCHEMY = {
-    'YYYY-MM-DD"T"HH24:MI:SS': '%Y-%m-%dT%H:%M:%S',
-    'YYYY-MM-DDTHH24:MI:SS': '%Y-%m-%dT%H:%M:%S',
+
+# Mapping of PostgreSQL date format specifiers to Python's datetime format specifiers
+_PG_PY_FORMAT_MAPPING = {
+    'YYYY-MM-DD"T"HH24:MI:SS': '%Y-%m-%dT%H:%M:%S',  # ISO 8601
     'YYYY-MM-DD"T"HH:MI:SS': '%Y-%m-%dT%I:%M:%S',
-    'YYYY-MM-DDTHH:MI:SS': '%Y-%m-%dT%I:%M:%S',
-    'YYYY-MM-DD HH24:MI:SS': '%Y-%m-%d %H:%M:%S',
-    'YYYY-MM-DD HH:MI:SS': '%Y-%m-%d %I:%M:%S %p',
-    'MM/DD/YYYY HH24:MI:SS': '%m/%d/%Y %H:%M:%S',
-    'MM/DD/YYYY HH:MI:SS': '%m/%d/%Y %I:%M:%S %p',
-    'DD/MM/YYYY HH24:MI:SS': '%d/%m/%Y %H:%M:%S',
-    'DD/MM/YYYY HH:MI:SS': '%d/%m/%Y %I:%M:%S %p',
-    'DD MON YYYY HH24:MI:SS': '%d %b %Y %H:%M:%S',
-    'DD MON YYYY HH:MI:SS': '%d %b %Y %I:%M:%S %p',
-    'YYYYMMDD HH24:MI:SS': '%Y%m%d %H:%M:%S',
-    'YYYYMMDD HH:MI:SS': '%Y%m%d %I:%M:%S',
+    'YYYY-MM-DD': '%Y-%m-%d',
+    'HH24:MI:SS': '%H:%M:%S',
+    'MM/DD/YYYY': '%m/%d/%Y',
+    'DD Mon YYYY': '%d %b %Y',
+    'DD MON YYYY': '%d %b %Y',
+    'YYYY': '%Y',  # 4-digit year
+    'YY': '%y',    # 2-digit year
+    'MM': '%m',    # Month number (01-12)
+    'DD': '%d',    # Day of the month (01-31)
+    'HH24': '%H',  # Hour (00-23)
+    'HH12': '%I',  # Hour (01-12)
+    'HH': '%I',    # Hour (01-12)
+    'MI': '%M',    # Minute (00-59)
+    'SS': '%S',    # Second (00-59)
+    'AM': '%p',    # AM or PM
+    'PM': '%p',    # AM or PM
+    'D': '%u',     # Day of the week (1-7, 1=Monday)
+    'Day': '%A',   # Full day name
+    'Mon': '%b',   # Abbreviated month name
+    'Month': '%B', # Full month name
+    'Dy': '%a',    # Abbreviated day name
+    'TZ': '%Z',    # Timezone name
+    'tz': '%z',    # Timezone offset
+    # Add more mappings as needed
+    # '': '%w',  # weekday as decimal 0 sunday, 6 saturday
+    'US': '%f',  # Microsecond
+    'DDD': '%j',  # Day of Year
+    # '': '%U',  # Week Number of the year, Sunday as first
+    # '': '%W',  # Week Number of the year, Monday as first
 }
-_PYTHON_DATESTRING_FROM_SQLALCHEMY = {
-    'YYYY-MM-DD"T"HH24:MI:SS': '%Y-%m-%d',
-    'YYYY-MM-DDTHH24:MI:SS': '%Y-%m-%d',
-    'YYYY-MM-DD"T"HH:MI:SS': '%Y-%m-%d',
-    'YYYY-MM-DDTHH:MI:SS': '%Y-%m-%d',
-    'YYYY-MM-DD HH24:MI:SS': '%Y-%m-%d',
-    'YYYY-MM-DD HH:MI:SS': '%Y-%m-%d',
-    'MM/DD/YYYY HH24:MI:SS': '%m/%d/%Y',
-    'MM/DD/YYYY HH:MI:SS': '%m/%d/%Y',
-    'DD/MM/YYYY HH24:MI:SS': '%d/%m/%Y',
-    'DD/MM/YYYY HH:MI:SS': '%d/%m/%Y',
-    'DD MON YYYY HH24:MI:SS': '%d %b %Y',
-    'DD MON YYYY HH:MI:SS': '%d %b %Y',
-    'YYYYMMDD HH24:MI:SS': '%Y%m%d',
-    'YYYYMMDD HH:MI:SS': '%Y%m%d',
-}
+
+_PY_PG_FORMAT_MAPPING = {v: k for k, v in _PG_PY_FORMAT_MAPPING.items()}
+
+def postgres_to_python_date_format(pg_format: str) -> str:
+    """ Translates a Postgres date format string to a python
+        date format string compatible with strftime
+    Notes:
+        Replace PostgreSQL specifiers with Python specifiers, in order of key length (descending)
+    Args:
+        pg_format (str): The Postgres date format string
+
+    Returns:
+        str: The python equivalent of `pg_format`
+
+    Examples:
+        >>> postgres_to_python_date_format('YYYY-MM-DD"T"HH24:MI:SS')
+        '%Y-%m-%dT%H:%M:%S'
+        >>> postgres_to_python_date_format('DD/MM/YYYY HH:MI:SS')
+        '%d/%m/%Y %I:%M:%S'
+    """
+
+    python_format = pg_format
+    for pg_spec in sorted(_PG_PY_FORMAT_MAPPING.keys(), key=len, reverse=True):
+        python_format = python_format.replace(pg_spec, _PG_PY_FORMAT_MAPPING[pg_spec])
+
+    return python_format
+
+
+def python_to_postgres_date_format(py_format: str) -> str:
+    """ Translates a Python date format string to a Postgres
+        date format string
+    Notes:
+        Replace Python specifiers with PostgreSQL specifiers, in order of key length (descending)
+    Args:
+        py_format (str): The Python date format string
+
+    Returns:
+        str: The Postgres equivalent of `py_format`
+
+    Examples:
+        >>> python_to_postgres_date_format('%Y-%m-%dT%H:%M:%S')
+        'YYYY-MM-DD"T"HH24:MI:SS'
+        >>> python_to_postgres_date_format('%d/%m/%Y %I:%M:%S')
+        'DD/MM/YYYY HH:MI:SS'
+    """
+    postgres_format = py_format
+    for py_spec in sorted(_PY_PG_FORMAT_MAPPING.keys(), key=len, reverse=True):
+        postgres_format = postgres_format.replace(py_spec, _PY_PG_FORMAT_MAPPING[py_spec])
+
+    return postgres_format
+
 
 
 def analyze_type(dtype):
@@ -170,31 +224,6 @@ def analyze_type(dtype):
             "Unrecognized dtype: '{}'. If you think it's valid, "
             "please add it to _ANALYZE_TYPE."
         ).format(dtype))
-
-
-def python_date_from_sql(date_string, date_only=False):
-    """ Translates a SQL date format string to a python
-        date format string compatible with strftime
-
-    Args:
-        date_string (str): The SQL date format string
-
-    Returns:
-        str: The python equivalent of `date_string`
-
-    Examples:
-        >>> python_date_from_sql('YYYY-MM-DD"T"HH24:MI:SS')
-        '%Y-%m-%dT%H:%M:%S'
-        >>> python_date_from_sql('DD/MM/YYYY HH:MI:SS', False)
-        '%d/%m/%Y %I:%M:%S %p'
-        >>> python_date_from_sql('YYYY-MM-DD"T"HH24:MI:SS', True)
-        '%Y-%m-%d'
-        >>> python_date_from_sql('DD/MM/YYYY HH:MI:SS', True)
-        '%d/%m/%Y'
-    """
-    if date_only:
-        return _PYTHON_DATESTRING_FROM_SQLALCHEMY[date_string]
-    return _PYTHON_DATETIMESTRING_FROM_SQLALCHEMY[date_string]
 
 
 def pandas_dtype_from_sql(sql):
