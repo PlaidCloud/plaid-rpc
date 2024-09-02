@@ -4,12 +4,11 @@ from sqlalchemy import (
     BIGINT, INTEGER, SMALLINT, TEXT, Boolean, TIMESTAMP, Interval, Date, Time
 )
 from sqlalchemy.sql.sqltypes import LargeBinary
-from sqlalchemy.dialects.postgresql import UUID
 
 import messytables
 
 from plaidcloud.rpc.functions import regex_map, RegexMapKeyError
-from plaidcloud.rpc.database import PlaidUnicode, PlaidNumeric, PlaidTimestamp, PlaidJSON
+from plaidcloud.rpc.database import PlaidUnicode, PlaidNumeric, PlaidTimestamp, PlaidJSON, GUIDHyphens
 
 __author__ = 'Paul Morel'
 __copyright__ = 'Copyright 2010-2023, Tartan Solutions, Inc'
@@ -296,7 +295,7 @@ _sqlalchemy_from_dtype = regex_map({
     r'^largebinary': LargeBinary,
     r'^byte.*': LargeBinary,
     r'^xml$': PlaidUnicode(4000),
-    r'^(?:generated_)?uuid$': UUID,
+    r'^(?:generated_)?uuid$': GUIDHyphens,
     r'^money$': PlaidNumeric,
     r'^real$': PlaidNumeric,
     r'^json$': PlaidJSON,
@@ -330,7 +329,7 @@ def sqlalchemy_from_dtype(dtype):
         >>> sqlalchemy_from_dtype('json')
         <class 'plaidcloud.rpc.database.PlaidJSON'>
         >>> sqlalchemy_from_dtype('uuid')
-        <class 'sqlalchemy.dialects.postgresql.base.UUID'>
+        <class 'plaidcloud.rpc.database.GUIDHyphens'>
     """
     key = str(dtype).lower()
     return _sqlalchemy_from_dtype(key)

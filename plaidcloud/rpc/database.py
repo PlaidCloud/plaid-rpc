@@ -15,11 +15,12 @@ import re
 import uuid
 import queue
 import unicodecsv as csv
+from operator import attrgetter
 
 import sqlalchemy
-from sqlalchemy.dialects.postgresql.base import PGDialect
+from sqlalchemy.dialects.postgresql.base import PGDialect, UUID
 from sqlalchemy.dialects.postgresql.json import JSONB
-from sqlalchemy.dialects.mssql.base import MSDialect
+from sqlalchemy.dialects.mssql.base import MSDialect, UNIQUEIDENTIFIER
 from sqlalchemy.dialects.mysql.base import MySQLDialect
 from sqlalchemy.types import (TypeDecorator, DateTime, Unicode, CHAR, TEXT, NVARCHAR,
                               UnicodeText, NUMERIC, TIMESTAMP, DATETIME, JSON)
@@ -80,30 +81,52 @@ class PlaidDate(TypeDecorator):
 class GUID(TypeDecorator):
     """Platform-independent GUID type.
 
-    Uses CHAR(32), storing as stringified hex values.
+    Uses PostgreSQL's UUID type or MSSQL's UNIQUEIDENTIFIER,
+    otherwise uses CHAR(32), storing as stringified hex values.
 
     """
+
     impl = CHAR
     cache_ok = True
 
+    _default_type = CHAR(32)
+    _uuid_as_str = attrgetter("hex")
+
     def load_dialect_impl(self, dialect):
-        return dialect.type_descriptor(TEXT)
+        if dialect.name == "postgresql":
+            return dialect.type_descriptor(UUID())
+        elif dialect.name == "mssql":
+            return dialect.type_descriptor(UNIQUEIDENTIFIER())
+        else:
+            return dialect.type_descriptor(self._default_type)
 
     def process_bind_param(self, value, dialect):
-        if value is None:
+        if value is None or dialect.name in ("postgresql", "mssql"):
             return value
         else:
             if not isinstance(value, uuid.UUID):
-                return "%.32x" % uuid.UUID(value)
-            else:
-                # hexstring
-                return "%.32x" % value
+                value = uuid.UUID(value)
+            return self._uuid_as_str(value)
 
     def process_result_value(self, value, dialect):
         if value is None:
             return value
         else:
-            return str(uuid.UUID(value))
+            if not isinstance(value, uuid.UUID):
+                value = uuid.UUID(value)
+            return value
+
+
+class GUIDHyphens(GUID):
+    """Platform-independent GUID type.
+
+    Uses PostgreSQL's UUID type or MSSQL's UNIQUEIDENTIFIER,
+    otherwise uses CHAR(36), storing as stringified uuid values.
+
+    """
+
+    _default_type = CHAR(36)
+    _uuid_as_str = str
 
 
 class StartPath(TypeDecorator):
