@@ -20,7 +20,7 @@ def timestamp():
 
 def obj():
     """Returns datetime object of current UTC time"""
-    return datetime.datetime.utcfromtimestamp(timestamp())
+    return datetime.datetime.fromtimestamp(timestamp(), datetime.UTC)
 
 
 def full():
