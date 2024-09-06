@@ -176,6 +176,8 @@ class SimpleRPC(PlainRPCCommon):
     def __init__(self, token, uri=None, verify_ssl=None, workspace=None, proxies=None, check_allow_transmit=None,
                  retry=True, headers=None):
         verify_ssl = bool(verify_ssl)
+        self.rpc_uri = uri
+        self.verify_ssl = verify_ssl
 
         def call_rpc(method_path, params, fire_and_forget=False):
             if callable(token):
