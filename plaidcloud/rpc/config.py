@@ -244,7 +244,7 @@ class PlaidConfig:
                 self.workspace_uuid = os.environ['__PLAID_WORKSPACE_UUID__']
                 self._workflow_id = os.environ['__PLAID_WORKFLOW_ID__']
                 self._step_id = os.environ['__PLAID_STEP_ID__']
-                self.verify_ssl = os.environ.get('__PLAID_VERIFY_SSL__', True)
+                self.verify_ssl = os.environ.get('__PLAID_VERIFY_SSL__', 'True') == 'True'
                 self.is_local = False
                 try:
                     self.hostname = urlparse(self.rpc_uri).netloc

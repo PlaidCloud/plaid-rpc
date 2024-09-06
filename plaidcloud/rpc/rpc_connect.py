@@ -20,7 +20,7 @@ __copyright__ = '© Copyright 2019-2023, Tartan Solutions, Inc'
 __license__ = 'Apache 2.0'
 
 
-class Connect(SimpleRPC, PlaidConfig):
+class Connect(PlaidConfig, SimpleRPC):
 
     """API wrapper class
 

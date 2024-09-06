@@ -176,8 +176,9 @@ class SimpleRPC(PlainRPCCommon):
     def __init__(self, token, uri=None, verify_ssl=None, workspace=None, proxies=None, check_allow_transmit=None,
                  retry=True, headers=None):
         verify_ssl = bool(verify_ssl)
-        self.rpc_uri = uri
-        self.verify_ssl = verify_ssl
+        self.__rpc_uri = uri
+        self.__verify_ssl = verify_ssl
+        self.__auth_token = token
 
         def call_rpc(method_path, params, fire_and_forget=False):
             if callable(token):
@@ -215,3 +216,17 @@ class SimpleRPC(PlainRPCCommon):
                         )
 
         super(SimpleRPC, self).__init__(call_rpc, check_allow_transmit)
+
+    @property
+    def verify_ssl(self):
+        return self.__verify_ssl
+
+    @property
+    def rpc_uri(self):
+        return self.__rpc_uri
+
+    @property
+    def auth_token(self):
+        if callable(self.__auth_token):
+            return self.__auth_token()
+        return self.__auth_token
