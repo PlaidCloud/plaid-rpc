@@ -30,12 +30,12 @@ def full():
 
 def iso():
     """Returns ISO 8601 date format of current UTC time"""
-    return '{0}+00:00'.format(obj().isoformat())
+    return obj().isoformat()
 
 
 def iso_timestamp():
     """Returns an ISO 8601 compliant timestamp string"""
-    return '{}Z'.format(datetime.datetime.utcnow().replace(microsecond=0).isoformat())
+    return datetime.datetime.now(datetime.UTC).replace(microsecond=0).strftime('%Y-%m-%dT%H:%M:%SZ')
 
 
 def monthrange(year, month):
