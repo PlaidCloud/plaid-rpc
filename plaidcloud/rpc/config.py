@@ -99,7 +99,7 @@ def initialize(filepath=None):
     """
 
     # Set run_timestamp to now.
-    now = datetime.datetime.utcnow()
+    now = datetime.datetime.now(datetime.UTC)
     CONFIG['run_timestamp'] = now.strftime('%Y-%m-%dT%H_%M_%SZ')
 
     # Set build to git hash.
