@@ -144,6 +144,8 @@ def postgres_to_python_date_format(pg_format: str) -> str:
         '%Y-%m-%dT%H:%M:%S'
         >>> postgres_to_python_date_format('DD/MM/YYYY HH:MI:SS')
         '%d/%m/%Y %I:%M:%S'
+        >>> postgres_to_python_date_format('YYYY-MM-DD')
+        '%Y-%m-%d'
     """
 
     python_format = pg_format
@@ -176,6 +178,39 @@ def python_to_postgres_date_format(py_format: str) -> str:
 
     return postgres_format
 
+
+def date_format_from_datetime_format(pg_format: str) -> str:
+    """ Return date-only version of predefined date formats, or return original
+
+    Args:
+        pg_format (str): The Postgres date format string
+
+    Returns:
+        str: The date-only equivalent of `pg_format` or pg_format
+
+    Examples:
+        >>> date_format_from_datetime_format('YYYY-MM-DD"T"HH24:MI:SS')
+        'YYYY-MM-DD'
+        >>> date_format_from_datetime_format('DD/MM/YYYY HH:MI:SS')
+        'DD/MM/YYYY'
+        >>> date_format_from_datetime_format('YYYY-MM-DDxyz123')
+        'YYYY-MM-DDxyz123'
+    """
+
+    PRE_DEF_DATE_FORMAT_MAP = {
+        'YYYY-MM-DD"T"HH24:MI:SS': 'YYYY-MM-DD',
+        'YYYY-MM-DD HH24:MI:SS': 'YYYY-MM-DD',
+        'YYYY-MM-DD HH:MI:SS': 'YYYY-MM-DD',
+        'MM/DD/YYYY HH24:MI:SS': 'MM/DD/YYYY',
+        'MM/DD/YYYY HH:MI:SS': 'MM/DD/YYYY',
+        'DD/MM/YYYY HH24:MI:SS': 'DD/MM/YYYY',
+        'DD/MM/YYYY HH:MI:SS': 'DD/MM/YYYY',
+        'DD MON YYYY HH24:MI:SS': 'DD MON YYYY',
+        'DD MON YYYY HH:MI:SS': 'DD MON YYYY',
+        'YYYYMMDD HH24:MI:SS': 'YYYYMMDD',
+        'YYYYMMDD HH:MI:SS': 'YYYYMMDD',
+    }
+    return PRE_DEF_DATE_FORMAT_MAP.get(pg_format, pg_format)
 
 
 def analyze_type(dtype):
