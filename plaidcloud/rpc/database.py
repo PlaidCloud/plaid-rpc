@@ -22,7 +22,7 @@ from sqlalchemy.dialects.postgresql.base import PGDialect, UUID
 from sqlalchemy.dialects.postgresql.json import JSONB
 from sqlalchemy.dialects.mssql.base import MSDialect, UNIQUEIDENTIFIER
 from sqlalchemy.dialects.mysql.base import MySQLDialect
-from sqlalchemy.types import (TypeDecorator, DateTime, Unicode, CHAR, TEXT, NVARCHAR,
+from sqlalchemy.types import (TypeDecorator, DateTime, Unicode, CHAR, TEXT, NVARCHAR, VARCHAR,
                               UnicodeText, NUMERIC, TIMESTAMP, DATETIME, JSON)
 from sqlalchemy_hana.dialect import HANAHDBCLIDialect
 from sqlalchemy_greenplum.dialect import GreenplumDialect
@@ -217,6 +217,8 @@ class PlaidUnicode(TypeDecorator):
         """
         if is_dialect_postgresql_based(dialect):
             return dialect.type_descriptor(UnicodeText)
+        if is_dialect_databend_based(dialect):
+            return dialect.type_descriptor(VARCHAR)
 
         return self.impl
 
