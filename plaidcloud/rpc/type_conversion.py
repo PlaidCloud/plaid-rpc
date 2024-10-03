@@ -100,6 +100,7 @@ _PG_PY_FORMAT_MAPPING = {
     'MM/DD/YYYY': '%m/%d/%Y',
     'DD Mon YYYY': '%d %b %Y',
     'DD MON YYYY': '%d %b %Y',
+    'IYYY': '%G', # ISO 8601 Year
     'YYYY': '%Y',  # 4-digit year
     'YY': '%y',    # 2-digit year
     'MM': '%m',    # Month number (01-12)
@@ -124,6 +125,7 @@ _PG_PY_FORMAT_MAPPING = {
     'DDD': '%j',  # Day of Year
     # '': '%U',  # Week Number of the year, Sunday as first
     # '': '%W',  # Week Number of the year, Monday as first
+    'IW': '%V', # ISO 8601 Week Numer
 }
 
 _PY_PG_FORMAT_MAPPING = {v: k for k, v in _PG_PY_FORMAT_MAPPING.items()}
