@@ -6,6 +6,8 @@ test_deps = [
     'minimock',
     'pytest-cov',
     'pytest-runner',
+    'sqlalchemy-hana',
+    'starrocks',
 ]
 
 extras = {

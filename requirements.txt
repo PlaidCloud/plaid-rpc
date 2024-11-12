@@ -1,19 +1,19 @@
 bleach
 comtypes;platform_system=="Windows"
-databend-sqlalchemy
+databend_sqlalchemy
 messytables@git+https://github.com/PlaidCloud/messytables.git@master#egg=messytables
 packaging
 psycopg2-binary
-pyjwt
-pyyaml
+PyJWT
+PyYAML
 requests
-requests_futures
+requests-futures
 setuptools
 orjson
-sqlalchemy~=1.4
+SQLAlchemy~=1.4
 sqlalchemy-greenplum
-sqlalchemy-hana
-starrocks
+#sqlalchemy-hana  # moved to test dependencies
+#starrocks  # moved to test dependencies
 toolz
 unicodecsv
 urllib3
