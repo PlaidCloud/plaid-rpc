@@ -24,10 +24,22 @@ from sqlalchemy.dialects.mssql.base import MSDialect, UNIQUEIDENTIFIER
 from sqlalchemy.dialects.mysql.base import MySQLDialect
 from sqlalchemy.types import (TypeDecorator, DateTime, Unicode, CHAR, TEXT, NVARCHAR, VARCHAR,
                               UnicodeText, NUMERIC, TIMESTAMP, DATETIME, JSON)
-from sqlalchemy_hana.dialect import HANAHDBCLIDialect
-from sqlalchemy_greenplum.dialect import GreenplumDialect
-from starrocks.dialect import StarRocksDialect
-from databend_sqlalchemy.databend_dialect import DatabendDialect
+try:
+    from sqlalchemy_hana.dialect import HANAHDBCLIDialect
+except ImportError:
+    HANAHDBCLIDialect = None
+try:
+    from sqlalchemy_greenplum.dialect import GreenplumDialect
+except ImportError:
+    GreenplumDialect = None
+try:
+    from starrocks.dialect import StarRocksDialect
+except ImportError:
+    StarRocksDialect = None
+try:
+    from databend_sqlalchemy.databend_dialect import DatabendDialect
+except ImportError:
+    DatabendDialect = None
 
 from plaidcloud.rpc import config
 
