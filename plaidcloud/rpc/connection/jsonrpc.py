@@ -39,7 +39,7 @@ if not os.path.exists(download_folder):
     os.makedirs(download_folder)
 
 
-def http_json_rpc(token=None, uri=None, verify_ssl=None, json_data=None, workspace=None, proxies=None,
+def http_json_rpc(token=None, uri=None, verify_ssl=None, json_data=None, proxies=None,
                   fire_and_forget=False, check_allow_transmit=None, retry=True, headers=None):
     """
     Sends a json_rpc request over http.
@@ -51,7 +51,6 @@ def http_json_rpc(token=None, uri=None, verify_ssl=None, json_data=None, workspa
         uri (str): the server uri to connect to
         verify_ssl (bool): passed to requests. flag to check the server's certs, or not.
         json_data (json-encodable object): the payload to send
-        workspace (int): workspace to connect to. If None, let the server connect to the default workspace for your user or token
         proxies (dict): Dictionary mapping protocol or protocol and hostname to the URL of the proxy.
         fire_and_forget (bool,optional): return from the method after the request is sent (not wait for response)
         check_allow_transmit (callable, optional): For use in retry, callable method to see if retries are still valid to send
@@ -59,10 +58,7 @@ def http_json_rpc(token=None, uri=None, verify_ssl=None, json_data=None, workspa
         headers (dict, optional): Custom headers to send with the RPC
     """
     def auth_header():
-        if workspace:
-            return "Bearer {}_ws{}".format(token, workspace)
-        else:
-            return "Bearer {}".format(token)
+        return "Bearer {}".format(token)
 
     def streamable():
         if json_data and json_data.get('method') in STREAM_ENDPOINTS:
@@ -165,6 +161,8 @@ class RPCRetry(Retry):
         if not self.allow_transmit:
             raise Exception('No more retries, RPC method has been cancelled')
         return super(RPCRetry, self).increment(*args, **kwargs)
+
+
 class SimpleRPC(PlainRPCCommon):
     """Call remote rpc methods with a dot based interface, almost as if they
     were simply functions in modules.
@@ -192,7 +190,6 @@ class SimpleRPC(PlainRPCCommon):
                     'method': method_path,
                     'params': params,
                 },
-                workspace=workspace,
                 proxies=proxies,
                 fire_and_forget=fire_and_forget,
                 check_allow_transmit=check_allow_transmit,
