@@ -145,7 +145,7 @@ class Connect(PlaidConfig, SimpleRPC):
 
     def ready(self):
         """Call SimpleRPC __init__ once we have an auth token"""
-        SimpleRPC.__init__(self, self.auth_token, uri=self.rpc_uri, workspace=self.workspace_id, check_allow_transmit=self.allow_transmit_func)
+        SimpleRPC.__init__(self, self.auth_token, uri=self.rpc_uri, check_allow_transmit=self.allow_transmit_func)
 
 
 class PlaidXLConnect(SimpleRPC, PlaidXLConfig):
@@ -161,4 +161,4 @@ class PlaidXLConnect(SimpleRPC, PlaidXLConfig):
 
     def __init__(self, *, rpc_uri: str, auth_token: str, workspace_id: str = '', project_id: str = ''):
         PlaidXLConfig.__init__(self, rpc_uri=rpc_uri, auth_token=auth_token, workspace_id=workspace_id, project_id=project_id)
-        SimpleRPC.__init__(self, self.auth_token, uri=self.rpc_uri, workspace=self.workspace_id)
+        SimpleRPC.__init__(self, self.auth_token, uri=self.rpc_uri)
