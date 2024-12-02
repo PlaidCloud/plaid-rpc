@@ -199,7 +199,6 @@ class PlaidConfig:
     _project_id = ''
     _workflow_id = ''
     _step_id = ''
-    workspace_id = 0
     workspace_uuid = ''
     verify_ssl = True
     # Members used for local setup
@@ -240,7 +239,6 @@ class PlaidConfig:
                 self.auth_uri = os.environ.get('__PLAID_AUTH_URI__')
                 self.auth_token = os.environ['__PLAID_RPC_AUTH_TOKEN__']
                 self._project_id = os.environ['__PLAID_PROJECT_ID__']
-                self.workspace_id = int(os.environ['__PLAID_WORKSPACE_ID__'])
                 self.workspace_uuid = os.environ['__PLAID_WORKSPACE_UUID__']
                 self._workflow_id = os.environ['__PLAID_WORKFLOW_ID__']
                 self._step_id = os.environ['__PLAID_STEP_ID__']
@@ -314,7 +312,6 @@ class PlaidConfig:
 
             self.redirect_uri = self.config.get('redirect_uri', '')
             self.auth_token = self.config.get('auth_token')
-            self.workspace_id = int(self.config['workspace'])
             self.workspace_uuid = self.config['workspace_uuid']
             self._project_id = self.config.get('project_id', '')
             self._workflow_id = self.config.get('workflow_id', '')
@@ -327,10 +324,9 @@ class PlaidConfig:
 
             if all([
                 isinstance(self._project_id, str),
-                isinstance(self.workspace_id, int)
+                isinstance(self.workspace_uuid, str)
             ]):
                 os.environ['__PLAID_PROJECT_ID__'] = self._project_id
-                os.environ['__PLAID_WORKSPACE_ID__'] = str(self.workspace_id)
                 os.environ['__PLAID_WORKSPACE_UUID__'] = self.workspace_uuid
                 os.environ['__PLAID_WORKFLOW_ID__'] = self._workflow_id
                 os.environ['__PLAID_STEP_ID__'] = self._step_id
@@ -458,7 +454,6 @@ class PlaidXLConfig(PlaidConfig):
         # self.auth_uri = os.environ.get('__PLAID_AUTH_URI__')
         self.auth_token = auth_token
         self._project_id = project_id
-        # self.workspace_id = int(os.environ['__PLAID_WORKSPACE_ID__'])
         self.workspace_uuid = workspace_id
         # self._workflow_id = os.environ['__PLAID_WORKFLOW_ID__']
         # self._step_id = os.environ['__PLAID_STEP_ID__']
