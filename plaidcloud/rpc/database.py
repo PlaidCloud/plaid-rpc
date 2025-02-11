@@ -672,7 +672,7 @@ def is_dialect_greenplum_based(dialect):
         >>> is_dialect_greenplum_based(GreenplumDialect())
         True
     """
-    return isinstance(dialect, GreenplumDialect)
+    return GreenplumDialect is not None and isinstance(dialect, GreenplumDialect)
 
 
 def is_dialect_hana_based(dialect):
@@ -692,7 +692,7 @@ def is_dialect_hana_based(dialect):
         >>> is_dialect_hana_based(GreenplumDialect())
         False
     """
-    return isinstance(dialect, HANAHDBCLIDialect)
+    return HANAHDBCLIDialect is not None and isinstance(dialect, HANAHDBCLIDialect)
 
 
 def is_dialect_mysql_based(dialect):
@@ -732,7 +732,7 @@ def is_dialect_starrocks_based(dialect):
         >>> is_dialect_starrocks_based(GreenplumDialect())
         False
     """
-    return isinstance(dialect, StarRocksDialect)
+    return StarRocksDialect is not None and isinstance(dialect, StarRocksDialect)
 
 
 def is_dialect_databend_based(dialect):
@@ -752,7 +752,7 @@ def is_dialect_databend_based(dialect):
         >>> is_dialect_databend_based(GreenplumDialect())
         False
     """
-    return isinstance(dialect, DatabendDialect)
+    return DatabendDialect is not None and isinstance(dialect, DatabendDialect)
 
 
 def get_compiled_table_name(engine, schema, table_name):
