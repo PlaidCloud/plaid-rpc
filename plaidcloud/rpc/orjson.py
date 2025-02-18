@@ -15,7 +15,9 @@ def unsupported_object_json_encoder(obj):
     if isinstance(obj, bytes):
         return obj.decode('utf-8')
     elif isinstance(obj, decimal.Decimal):
-        return str(obj.normalize())
+        if obj.is_zero():
+            return '0'
+        return str(obj)
     elif isinstance(obj, datetime.timedelta):
         return str(obj)
     elif isinstance(obj, set):
