@@ -26,7 +26,7 @@ class TestDefaultEncoder(unittest.TestCase):
         self.assertEqual(json.dumps({'check': bytes('This is some bytes', 'utf-8')}, default=enc, option=json.OPT_NON_STR_KEYS), b'{"check":"This is some bytes"}')
 
     def test_handles_decimal(self):
-        self.assertEqual(json.dumps({'check': decimal.Decimal(7.3454)}, default=enc, option=json.OPT_NON_STR_KEYS), b'{"check":"7.3453999999999997072563928668387234210968017578125"}')
+        self.assertEqual(json.dumps({'check': decimal.Decimal('7.345400')}, default=enc, option=json.OPT_NON_STR_KEYS), b'{"check":"7.3454"}')
 
     def test_handles_decimal_zero(self):
         self.assertEqual(json.dumps({'check': decimal.Decimal(0.0000000000)}, default=enc, option=json.OPT_NON_STR_KEYS), b'{"check":"0"}')
