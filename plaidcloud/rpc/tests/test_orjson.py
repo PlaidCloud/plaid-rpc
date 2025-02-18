@@ -28,6 +28,12 @@ class TestDefaultEncoder(unittest.TestCase):
     def test_handles_decimal(self):
         self.assertEqual(json.dumps({'check': decimal.Decimal(7.3454)}, default=enc, option=json.OPT_NON_STR_KEYS), b'{"check":"7.3453999999999997072563928668387234210968017578125"}')
 
+    def test_handles_decimal_zero(self):
+        self.assertEqual(json.dumps({'check': decimal.Decimal(0.0000000000)}, default=enc, option=json.OPT_NON_STR_KEYS), b'{"check":"0"}')
+
+    def test_handles_decimal_string_made_zero(self):
+        self.assertEqual(json.dumps({'check': decimal.Decimal("0.0000000000")}, default=enc, option=json.OPT_NON_STR_KEYS), b'{"check":"0"}')
+
     def test_handles_timedelta(self):
         self.assertEqual(json.dumps({'check': datetime.timedelta(days=10, weeks=1, hours=2, minutes=3, microseconds=11)}, default=enc, option=json.OPT_NON_STR_KEYS), b'{"check":"17 days, 2:03:00.000011"}')
 
