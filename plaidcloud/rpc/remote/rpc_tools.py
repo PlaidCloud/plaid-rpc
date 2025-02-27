@@ -2,6 +2,7 @@
 # coding=utf-8
 
 import asyncio
+import itertools
 import os
 import types
 import tempfile
@@ -32,12 +33,12 @@ def get_auth_id(workspace_id, member_id, scopes):
     }
 
 
-def direct_rpc(auth_id, method, params, logger=None):
+def direct_rpc(auth_id, method, params, logger=None, sequence=None):
     callable_object, required_scope, default_error, is_streamed, use_thread = get_callable_object(
         method, version=1, base_path=BASE_MODULE_PATH, logger=logger
     )
     if logger:
-        logger.info(f'Start "{method}"')
+        logger.info(f'Start "{method}" {sequence if sequence is not None else ""}')
     try:
         if asyncio.iscoroutinefunction(callable_object):
             result = asyncio.get_event_loop().run_until_complete(callable_object(auth_id=auth_id, **params))
@@ -54,15 +55,15 @@ def direct_rpc(auth_id, method, params, logger=None):
         return result
     finally:
         if logger:
-            logger.info(f'Finish "{method}"')
+            logger.info(f'Finish "{method}" {sequence if sequence is not None else ""}')
 
 
-async def direct_rpc_async(auth_id, method, params, logger=None):
+async def direct_rpc_async(auth_id, method, params, logger=None, sequence=None):
     callable_object, required_scope, default_error, is_streamed, use_thread = get_callable_object(
         method, version=1, base_path=BASE_MODULE_PATH, logger=logger
     )
     if logger:
-        logger.info(f'Start "{method}"')
+        logger.info(f'Start "{method}" {sequence if sequence is not None else ""}')
     try:
         if asyncio.iscoroutinefunction(callable_object):
             if use_thread:
@@ -84,7 +85,7 @@ async def direct_rpc_async(auth_id, method, params, logger=None):
         return result
     finally:
         if logger:
-            logger.info(f'Finish "{method}"')
+            logger.info(f'Finish "{method}" {sequence if sequence is not None else ""}')
 
 
 class PlainRPCCommon(object):
@@ -164,6 +165,8 @@ class DirectRPC(PlainRPCCommon):
     rpc = DirectRPC(auth_id=auth_id)
     scopes = rpc.identity.me.scopes()
     """
+    sequence = itertools.count()
+
     def __init__(self, workspace_id=None, user_id=None, scopes=None, auth_id=None, use_async=False, logger=None):
         if not auth_id:
             auth_id = get_auth_id(workspace_id, user_id, scopes)
@@ -171,7 +174,7 @@ class DirectRPC(PlainRPCCommon):
         def call_rpc(method_path, params, fire_and_forget=False):
             # fire_and_forget does nothing here.
             if use_async:
-                return direct_rpc_async(auth_id, method_path, params, logger)
-            return direct_rpc(auth_id, method_path, params, logger)
+                return direct_rpc_async(auth_id, method_path, params, logger, next(self.sequence))
+            return direct_rpc(auth_id, method_path, params, logger, next(self.sequence))
 
         super(DirectRPC, self).__init__(call_rpc)
