@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 from sqlalchemy import (
-    BIGINT, INTEGER, SMALLINT, TEXT, Boolean, TIMESTAMP, Interval, Date, Time
+    BIGINT, INTEGER, SMALLINT, TEXT, Boolean, Interval, Date, Time
 )
 from sqlalchemy.sql.sqltypes import LargeBinary
 
@@ -18,6 +18,7 @@ __maintainer__ = 'Paul Morel'
 __email__ = 'paul.morel@tartansolutions.com'
 
 _ANALYZE_TYPE = regex_map({
+        r'^array$': 'text',
         r'^bool$': 'boolean',
         r'^boolean$': 'boolean',
         r'^s\d+': 'text',
@@ -38,10 +39,12 @@ _ANALYZE_TYPE = regex_map({
         r'^float\d*': 'numeric',
         r'^numeric.*': 'numeric',
         r'^decimal.*': 'numeric',
+        r'^double(?: precision)?$': 'numeric',
+        r'^number$': 'numeric',
         r'^serial$': 'integer',
         r'^bigserial$': 'bigint',
         r'^datetime.*': 'timestamp',  # This may have to cover all datetimes
-        r'^timestamp\b.*': 'timestamp',
+        r'^timestamp.*': 'timestamp',
         r'^timedelta.*': 'interval',  # This may have to cover all timedeltas
         r'^interval$': 'interval',
         r'^date$': 'date',
@@ -65,9 +68,12 @@ _ANALYZE_TYPE = regex_map({
         r'^image$': 'largebinary',
         r'^rowversion$': 'numeric',
         r'^hierarchyid$': 'text',
-        r'^sql_variant$': 'text',
+        r'^(sql_)?variant$': 'text',
+        r'^geometry$': 'text',
+        r'^geography$': 'text',
         r'^spatial_(?:geometry|geography)_types$': 'text',  # spatial_geometry_types + spatial_geography_types
-        r'^table$': 'text'
+        r'^table$': 'text',
+        r'^vector$': 'text',
 })
 
 _PANDAS_DTYPE_FROM_SQL = regex_map({
