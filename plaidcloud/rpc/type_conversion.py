@@ -5,6 +5,8 @@ from sqlalchemy import (
 )
 from sqlalchemy.sql.sqltypes import LargeBinary
 
+from pyarrow import from_numpy_dtype, string, DataType
+
 import messytables
 
 from plaidcloud.rpc.functions import regex_map, RegexMapKeyError
@@ -96,6 +98,33 @@ _PANDAS_DTYPE_FROM_SQL = regex_map({
     r'^json*$': 'object',
 })
 
+def arrow_type_from_analyze_type(dtype: str) -> DataType:
+    """Returns an arrow/parquet type given an analyze type
+
+    Args:
+        dtype (str): The analyze data type
+
+    Raises:
+        ValueError: If 'date' is passed in due to a bug in arrow
+
+    Returns:
+        DataType: The arrow/parquet type that matches `dtype`
+    """
+    if dtype == 'date':
+        # CRL 2025 - There is currently a bug in PyArrow that will cause the parquet
+        # write to fail if a date is manually specified. Datetimes work without issue,
+        # so just provide a more helpful error until this issue is resolved:
+        # https://github.com/apache/arrow/issues/36277
+        raise ValueError('Date types are currently not supported in this step type. ' \
+                         'Please set target column to timestamp and convert to date later if needed.')
+    np_type = pandas_dtype_from_sql(dtype)
+    if np_type == 'object':
+        # Fall back to string
+        return string()
+
+    if np_type == 'datetime64[s]':
+        np_type = 'datetime64[ns]'
+    return from_numpy_dtype(np_type)
 
 # Mapping of PostgreSQL date format specifiers to Python's datetime format specifiers
 _PG_PY_FORMAT_MAPPING = {
