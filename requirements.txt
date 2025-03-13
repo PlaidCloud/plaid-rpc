@@ -4,6 +4,7 @@ databend_sqlalchemy
 messytables@git+https://github.com/PlaidCloud/messytables.git@master#egg=messytables
 packaging
 psycopg2-binary
+pyarrow
 PyJWT
 PyYAML
 requests
