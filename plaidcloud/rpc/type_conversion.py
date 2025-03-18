@@ -124,7 +124,7 @@ def arrow_type_from_analyze_type(dtype: str) -> DataType:
 
     if np_type == 'datetime64[s]':
         np_type = 'datetime64[ns]'
-    return from_numpy_dtype(np_type)
+    return from_numpy_dtype(np_type.lower())
 
 # Mapping of PostgreSQL date format specifiers to Python's datetime format specifiers
 _PG_PY_FORMAT_MAPPING = {
