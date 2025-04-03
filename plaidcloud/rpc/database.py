@@ -14,7 +14,7 @@ import datetime
 import re
 import uuid
 import queue
-import unicodecsv as csv
+import csv
 from operator import attrgetter
 
 import sqlalchemy
