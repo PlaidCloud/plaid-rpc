@@ -16,5 +16,4 @@ sqlalchemy-greenplum
 #sqlalchemy-hana  # moved to test dependencies
 #starrocks  # moved to test dependencies
 toolz
-unicodecsv
 urllib3
