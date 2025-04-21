@@ -5,7 +5,7 @@ from sqlalchemy import (
 )
 from sqlalchemy.sql.sqltypes import LargeBinary
 
-from pyarrow import from_numpy_dtype, string, DataType
+from pyarrow import from_numpy_dtype, string, date64, DataType
 
 import messytables
 
@@ -110,6 +110,9 @@ def arrow_type_from_analyze_type(dtype: str) -> DataType:
     Returns:
         DataType: The arrow/parquet type that matches `dtype`
     """
+    if dtype == 'date':
+        # Special case. Pandas treats all date types as timestamp, arrow needs to specify
+        return date64()
     np_type = pandas_dtype_from_sql(dtype)
     if np_type == 'object':
         # Fall back to string
