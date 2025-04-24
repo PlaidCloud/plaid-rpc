@@ -22,7 +22,6 @@ from sqlalchemy.dialects.postgresql.base import PGDialect, UUID
 from sqlalchemy.dialects.postgresql.json import JSONB
 from sqlalchemy.dialects.mssql.base import MSDialect, UNIQUEIDENTIFIER
 from sqlalchemy.dialects.mysql.base import MySQLDialect
-from snowflake.sqlalchemy.snowdialect import SnowflakeDialect
 from sqlalchemy.types import (TypeDecorator, DateTime, Unicode, CHAR, TEXT, NVARCHAR, VARCHAR,
                               UnicodeText, NUMERIC, TIMESTAMP, DATETIME, JSON)
 try:
@@ -41,6 +40,10 @@ try:
     from databend_sqlalchemy.databend_dialect import DatabendDialect
 except ImportError:
     DatabendDialect = None
+try:
+    from snowflake.sqlalchemy.snowdialect import SnowflakeDialect
+except ImportError:
+    SnowflakeDialect = None
 
 from plaidcloud.rpc import config
 
