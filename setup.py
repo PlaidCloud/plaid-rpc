@@ -8,6 +8,7 @@ test_deps = [
     'pytest-runner',
     'sqlalchemy-hana',
     'starrocks',
+    'snowflake-sqlalchemy'
 ]
 
 extras = {
