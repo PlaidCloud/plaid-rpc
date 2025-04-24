@@ -22,6 +22,7 @@ from sqlalchemy.dialects.postgresql.base import PGDialect, UUID
 from sqlalchemy.dialects.postgresql.json import JSONB
 from sqlalchemy.dialects.mssql.base import MSDialect, UNIQUEIDENTIFIER
 from sqlalchemy.dialects.mysql.base import MySQLDialect
+from snowflake.sqlalchemy.snowdialect import SnowflakeDialect
 from sqlalchemy.types import (TypeDecorator, DateTime, Unicode, CHAR, TEXT, NVARCHAR, VARCHAR,
                               UnicodeText, NUMERIC, TIMESTAMP, DATETIME, JSON)
 try:
@@ -204,7 +205,7 @@ class PlaidNumeric(TypeDecorator):
             dialect (Dialect): SQLAlchemy dialect
         Returns:
             str: Type Descriptor"""
-        if is_dialect_sql_server_based(dialect) or is_dialect_mysql_based(dialect):
+        if is_dialect_sql_server_based(dialect) or is_dialect_mysql_based(dialect) or is_dialect_snowflake_based(dialect):
             return dialect.type_descriptor(NUMERIC(38, 10))
         else:
             return self.impl
@@ -733,6 +734,26 @@ def is_dialect_starrocks_based(dialect):
         False
     """
     return StarRocksDialect is not None and isinstance(dialect, StarRocksDialect)
+
+
+def is_dialect_snowflake_based(dialect):
+    """Is a dialect derived from underlying Snowflake dialect
+
+    Args:
+        dialect (sqlalchemy.engine.interfaces.Dialect): The dialect to test
+
+    Returns:
+        bool: If the dialect is a descendant of the Snowflake base dialect
+
+    Examples:
+        >>> is_dialect_snowflake_based(SnowflakeDialect())
+        True
+        >>> is_dialect_mysql_based(StarRocksDialect())
+        False
+        >>> is_dialect_mysql_based(GreenplumDialect())
+        False
+    """
+    return isinstance(dialect, SnowflakeDialect)
 
 
 def is_dialect_databend_based(dialect):
