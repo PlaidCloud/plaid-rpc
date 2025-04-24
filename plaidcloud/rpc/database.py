@@ -748,9 +748,9 @@ def is_dialect_snowflake_based(dialect):
     Examples:
         >>> is_dialect_snowflake_based(SnowflakeDialect())
         True
-        >>> is_dialect_mysql_based(StarRocksDialect())
+        >>> is_dialect_snowflake_based(StarRocksDialect())
         False
-        >>> is_dialect_mysql_based(GreenplumDialect())
+        >>> is_dialect_snowflake_based(GreenplumDialect())
         False
     """
     return isinstance(dialect, SnowflakeDialect)
