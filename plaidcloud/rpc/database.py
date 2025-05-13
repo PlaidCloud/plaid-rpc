@@ -756,7 +756,7 @@ def is_dialect_snowflake_based(dialect):
         >>> is_dialect_snowflake_based(GreenplumDialect())
         False
     """
-    return isinstance(dialect, SnowflakeDialect)
+    return SnowflakeDialect is not None and isinstance(dialect, SnowflakeDialect)
 
 
 def is_dialect_databend_based(dialect):
