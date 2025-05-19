@@ -5,7 +5,7 @@ from sqlalchemy import (
 )
 from sqlalchemy.sql.sqltypes import LargeBinary
 
-from pyarrow import from_numpy_dtype, string, date64, DataType
+from pyarrow import from_numpy_dtype, string, date64, DataType, decimal128
 
 import messytables
 
@@ -98,7 +98,7 @@ _PANDAS_DTYPE_FROM_SQL = regex_map({
     r'^json*$': 'object',
 })
 
-def arrow_type_from_analyze_type(dtype: str) -> DataType:
+def arrow_type_from_analyze_type(dtype: str, use_decimal_type: bool = False) -> DataType:
     """Returns an arrow/parquet type given an analyze type
 
     Args:
@@ -117,6 +117,8 @@ def arrow_type_from_analyze_type(dtype: str) -> DataType:
     if np_type == 'object':
         # Fall back to string
         return string()
+    if use_decimal_type and np_type == 'float64':
+        return decimal128(38, 10)
     return from_numpy_dtype(np_type.lower())
 
 # Mapping of PostgreSQL date format specifiers to Python's datetime format specifiers
