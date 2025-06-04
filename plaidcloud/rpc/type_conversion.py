@@ -83,6 +83,8 @@ _ANALYZE_TYPE = regex_map({
         r'^bson.*$': 'json',
         r'^undefined$': 'text',
         r'^none$': 'text',
+        # avro types
+        r'^long$': 'bigint',
 })
 
 _PANDAS_DTYPE_FROM_SQL = regex_map({
