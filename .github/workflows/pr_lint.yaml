@@ -16,13 +16,14 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
       - name: Install dependencies
-        run: pip install -e .[test]; pip install -q pylint==${{ secrets.PYLINT_VERSION }}; pip install -q liccheck;
+        run: pip install -e .[test]; pip install -q pylint==${{ secrets.PYLINT_VERSION }};
       - name: License Checker
         uses: andersy005/gh-action-py-liccheck@main
         with:
           strategy-ini-file: ./liccheck.ini
           level: cautious
           requirements-txt-file: ./requirements.txt
+          liccheck-version: ${{ secrets.LICCHECK_VERSION }}
       - name: Install ReviewDog
         uses: reviewdog/action-setup@v1
       - name: Perform Lint
