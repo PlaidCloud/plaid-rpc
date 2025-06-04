@@ -65,7 +65,7 @@ _ANALYZE_TYPE = regex_map({
         r'^cursor$': 'text',  # CRL2022 - No idea if this will work but it is a valid MSSQL data type.
         r'^uniqueidentifier$': 'text',
         r'^bit$': 'numeric',
-        r'^int$': 'numeric',
+        r'^int$': 'integer',
         r'^smalldatetime$': 'timestamp',
         r'^image$': 'largebinary',
         r'^rowversion$': 'numeric',
@@ -76,6 +76,13 @@ _ANALYZE_TYPE = regex_map({
         r'^spatial_(?:geometry|geography)_types$': 'text',  # spatial_geometry_types + spatial_geography_types
         r'^table$': 'text',
         r'^vector$': 'text',
+        # parquet types
+        r'^map$': 'text',
+        r'^list$': 'text',
+        r'^enum$': 'text',
+        r'^bson.*$': 'json',
+        r'^undefined$': 'text',
+        r'^none$': 'text',
 })
 
 _PANDAS_DTYPE_FROM_SQL = regex_map({
