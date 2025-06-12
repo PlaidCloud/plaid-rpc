@@ -11,7 +11,7 @@ requests
 requests-futures
 setuptools
 orjson
-SQLAlchemy~=1.4
+SQLAlchemy
 sqlalchemy-greenplum
 #sqlalchemy-hana  # moved to test dependencies
 #starrocks  # moved to test dependencies
