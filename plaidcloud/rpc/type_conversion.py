@@ -25,7 +25,7 @@ _ANALYZE_TYPE = regex_map({
         r'^boolean$': 'boolean',
         r'^s\d+': 'text',
         r'^object$': 'text',
-        r'^[n]?text$': 'text',  # text + ntext
+        r'^[n]?text.*$': 'text',  # text + ntext
         r'^[n]?char': 'text',  # char + nchar
         r'^nvarchar(\([0-9]*\))*': 'text',
         r'^varchar(\([0-9]*\))*': 'text',
@@ -84,7 +84,10 @@ _ANALYZE_TYPE = regex_map({
         r'^undefined$': 'text',
         r'^none$': 'text',
         # avro types
-        r'^long$': 'bigint',
+        r'^long.*$': 'bigint',
+        r'^currency$': 'numeric',
+        r'^memo.*$': 'text',
+        r'^ole.*$': 'largebinary',
 })
 
 _PANDAS_DTYPE_FROM_SQL = regex_map({
