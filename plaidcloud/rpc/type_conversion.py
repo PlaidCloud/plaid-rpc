@@ -1,16 +1,29 @@
 #!/usr/bin/env python
+import re
+
+import sqlalchemy
+from sqlalchemy import types as sqltypes
+
+# Check SQLAlchemy version
+if sqlalchemy.__version__.startswith('2.'):
+    from sqlalchemy.types import DOUBLE
+else:
+    from databend_sqlalchemy.types import DOUBLE
 
 from sqlalchemy import (
-    BIGINT, INTEGER, SMALLINT, TEXT, Boolean, Interval, Date, Time
+    BIGINT, INTEGER, SMALLINT, TEXT, Boolean, Interval, Date, Time, FLOAT
 )
+from sqlalchemy import types as sqltypes
 from sqlalchemy.sql.sqltypes import LargeBinary
+
 
 from pyarrow import from_numpy_dtype, string, date64, DataType, decimal128
 
 import messytables
 
 from plaidcloud.rpc.functions import regex_map, RegexMapKeyError
-from plaidcloud.rpc.database import PlaidUnicode, PlaidNumeric, PlaidTimestamp, PlaidJSON, GUIDHyphens
+from plaidcloud.rpc.database import (PlaidUnicode, PlaidNumeric, PlaidTimestamp, PlaidJSON, GUIDHyphens,
+                                     PlaidTinyInt)
 
 __author__ = 'Paul Morel'
 __copyright__ = 'Copyright 2010-2023, Tartan Solutions, Inc'
@@ -347,14 +360,14 @@ _sqlalchemy_from_dtype = regex_map({
     r'^string$': PlaidUnicode(4000),
     r'^serial$': INTEGER,
     r'^bigserial$': BIGINT,
-    r'^int8$': SMALLINT,  # 2 bytes
+    r'^int8$': PlaidTinyInt,  # 2 bytes
     r'^int16$': SMALLINT,  # 2 bytes
     r'^smallint$': SMALLINT,
     r'^int32$': INTEGER,  # 4 bytes
     r'^integer$': INTEGER,
     r'^int64$': BIGINT,  # 8 bytes
     r'^bigint$': BIGINT,
-    r'^float\d*': PlaidNumeric,  # variable but ensures precision
+    r'^float\d*': FLOAT,
     r'^numeric.*': PlaidNumeric,
     r'^decimal.*': PlaidNumeric,
     r'^datetime.*': PlaidTimestamp,  # This may have to cover all datetimes
@@ -381,7 +394,10 @@ _sqlalchemy_from_dtype = regex_map({
     r'^cidr$': PlaidUnicode(100),
     r'^inet$': PlaidUnicode(100),
     r'^macaddr$': PlaidUnicode(100),
+    r'^tinyint$': PlaidTinyInt,
+    r'^double$': DOUBLE
 })
+
 def sqlalchemy_from_dtype(dtype):
     """
     Returns (sqlalchemy type):

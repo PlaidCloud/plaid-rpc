@@ -23,7 +23,10 @@ from sqlalchemy.dialects.postgresql.json import JSONB
 from sqlalchemy.dialects.mssql.base import MSDialect, UNIQUEIDENTIFIER
 from sqlalchemy.dialects.mysql.base import MySQLDialect
 from sqlalchemy.types import (TypeDecorator, DateTime, Unicode, CHAR, TEXT, NVARCHAR, VARCHAR,
-                              UnicodeText, NUMERIC, TIMESTAMP, DATETIME, JSON)
+                              UnicodeText, NUMERIC, TIMESTAMP, DATETIME, JSON, SMALLINT, VARBINARY)
+
+from databend_sqlalchemy import databend_dialect
+
 try:
     from sqlalchemy_hana.dialect import HANAHDBCLIDialect
 except ImportError:
@@ -214,6 +217,7 @@ class PlaidNumeric(TypeDecorator):
         else:
             return self.impl
 
+
 class PlaidUnicode(TypeDecorator):
     """Unicode Type that implements as UnicodeText on Postgresql based environments
 
@@ -239,6 +243,26 @@ class PlaidUnicode(TypeDecorator):
 
         return self.impl
 
+
+class PlaidTinyInt(TypeDecorator):
+    impl = SMALLINT
+    cache_ok = True
+
+    def load_dialect_impl(self, dialect):
+        """Loads the dialect implementation
+        Note:
+            Implement as SMALLINT if not using Databend
+        Args:
+            dialect (Dialect): SQLAlchemy dialect
+        Returns:
+            str: Type Descriptor
+        """
+        if is_dialect_databend_based(dialect):
+            return dialect.type_descriptor(databend_dialect.TINYINT)
+
+        return self.impl
+
+
 class PlaidJSON(TypeDecorator):
     """JSON type that implements as JSONB on Postgresql based environments
 
@@ -262,6 +286,23 @@ class PlaidJSON(TypeDecorator):
 
         return self.impl
 
+class PlaidBitmap(TypeDecorator):
+    impl = VARBINARY
+    cache_ok = True
+
+    def load_dialect_impl(self, dialect):
+        """Loads the dialect implementation
+        Note:
+            Implement as VARBINARY if not using Databend
+        Args:
+            dialect (Dialect): SQLAlchemy dialect
+        Returns:
+            str: Type Descriptor
+        """
+        if is_dialect_databend_based(dialect):
+            return dialect.type_descriptor(databend_dialect.BITMAP)
+
+        return self.impl
 
 def text_repr(val):
     """Format values in a way that can be written as text to disk.
