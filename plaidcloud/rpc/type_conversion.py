@@ -23,7 +23,7 @@ import messytables
 
 from plaidcloud.rpc.functions import regex_map, RegexMapKeyError
 from plaidcloud.rpc.database import (PlaidUnicode, PlaidNumeric, PlaidTimestamp, PlaidJSON, GUIDHyphens,
-                                     PlaidTinyInt)
+                                     PlaidTinyInt, PlaidGeography, PlaidGeometry)
 
 __author__ = 'Paul Morel'
 __copyright__ = 'Copyright 2010-2023, Tartan Solutions, Inc'
@@ -395,7 +395,9 @@ _sqlalchemy_from_dtype = regex_map({
     r'^inet$': PlaidUnicode(100),
     r'^macaddr$': PlaidUnicode(100),
     r'^tinyint$': PlaidTinyInt,
-    r'^double$': DOUBLE
+    r'^double$': DOUBLE,
+    r'^geometry': PlaidGeometry,
+    r'^geography': PlaidGeography,
 })
 
 def sqlalchemy_from_dtype(dtype):

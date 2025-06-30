@@ -262,6 +262,27 @@ class PlaidTinyInt(TypeDecorator):
 
         return self.impl
 
+class PlaidGeometry(TypeDecorator):
+    impl = databend_dialect.GEOMETRY
+    cache_ok = True
+
+    def load_dialect_impl(self, dialect):
+        if not is_dialect_databend_based(dialect):
+            raise NotImplementedError('PlaidGeometry is only supported on Databend')
+
+        return self.impl
+
+
+class PlaidGeography(TypeDecorator):
+    impl = databend_dialect.GEOGRAPHY
+    cache_ok = True
+
+    def load_dialect_impl(self, dialect):
+        if not is_dialect_databend_based(dialect):
+            raise NotImplementedError('PlaidGeography is only supported on Databend')
+
+        return self.impl
+
 
 class PlaidJSON(TypeDecorator):
     """JSON type that implements as JSONB on Postgresql based environments
