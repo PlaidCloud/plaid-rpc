@@ -1,10 +1,12 @@
 bleach
+chardet>=2.3.0
 comtypes;platform_system=="Windows"
 databend_sqlalchemy
-messytables@git+https://github.com/PlaidCloud/messytables.git@master
 packaging
 psycopg2-binary
 pyarrow
+python-dateutil>=1.5.0
+python-magic>=0.4.12
 PyJWT
 PyYAML
 requests
@@ -12,8 +14,5 @@ requests-futures
 setuptools
 orjson
 SQLAlchemy
-sqlalchemy-greenplum
-#sqlalchemy-hana  # moved to test dependencies
-#starrocks  # moved to test dependencies
 toolz
 urllib3

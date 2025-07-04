@@ -7,10 +7,9 @@ from sqlalchemy.sql.sqltypes import LargeBinary
 
 from pyarrow import from_numpy_dtype, string, date64, DataType, decimal128
 
-import messytables
-
 from plaidcloud.rpc.functions import regex_map, RegexMapKeyError
 from plaidcloud.rpc.database import PlaidUnicode, PlaidNumeric, PlaidTimestamp, PlaidJSON, GUIDHyphens
+from plaidcloud.rpc.messytables.types import IntegerType, StringType, DecimalType, DateType, BoolType as _BoolType, type_guess as _type_guess
 
 __author__ = 'Paul Morel'
 __copyright__ = 'Copyright 2010-2023, Tartan Solutions, Inc'
@@ -414,25 +413,23 @@ def sqlalchemy_from_dtype(dtype):
     return _sqlalchemy_from_dtype(key)
 
 
-class BoolType(messytables.BoolType):
+class BoolType(_BoolType):
     true_values = ('yes', 'true')  # Not '1'
     false_values = ('no', 'false')  # Not '0'
 
 
 TYPES = [
-    messytables.StringType,
-    messytables.DecimalType,
-    messytables.IntegerType,
-    messytables.DateType,
+    StringType,
+    DecimalType,
+    IntegerType,
+    DateType,
     BoolType,
 ]
 
 
-def type_guess(sample, types=None, strict=True):
+def type_guess(sample, strict=True):
     """ Replacement for messytables.type_guess that allows for plaid-wide fine-tuning.
         The current difference is that columns made of 0 and 1 are integer
         instead of boolean.
     """
-    if not types:
-        types = TYPES
-    return messytables.type_guess(sample, types=types, strict=strict)
+    return _type_guess(sample, types=TYPES, strict=strict)
