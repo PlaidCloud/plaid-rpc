@@ -1,7 +1,7 @@
 bleach
 comtypes;platform_system=="Windows"
 databend_sqlalchemy
-messytables@git+https://github.com/PlaidCloud/messytables.git@master#egg=messytables
+messytables@git+https://github.com/PlaidCloud/messytables.git@master
 packaging
 psycopg2-binary
 pyarrow
