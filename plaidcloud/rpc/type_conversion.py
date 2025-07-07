@@ -1,4 +1,8 @@
 #!/usr/bin/env python
+from plaidcloud.rpc.database import (
+    PlaidUnicode, PlaidNumeric, PlaidTimestamp, PlaidJSON, GUIDHyphens, PlaidTinyInt, PlaidGeography, PlaidGeometry
+)
+
 import sqlalchemy
 
 # Check SQLAlchemy version
@@ -17,7 +21,6 @@ from pyarrow import from_numpy_dtype, string, date64, DataType, decimal128
 
 from plaidcloud.rpc.functions import regex_map, RegexMapKeyError
 
-from plaidcloud.rpc.database import PlaidUnicode, PlaidNumeric, PlaidTimestamp, PlaidJSON, GUIDHyphens, PlaidTinyInt, PlaidGeography, PlaidGeometry
 from plaidcloud.rpc.messytables.types import IntegerType, StringType, DecimalType, DateType, BoolType as _BoolType, type_guess as _type_guess
 
 

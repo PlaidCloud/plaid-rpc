@@ -17,14 +17,18 @@ import queue
 import csv
 from operator import attrgetter
 
+from sqlalchemy.types import (TypeDecorator, DateTime, Unicode, CHAR, NVARCHAR, VARCHAR, UnicodeText, NUMERIC,
+                              TIMESTAMP, DATETIME, JSON, SMALLINT, VARBINARY)
+
+
 import sqlalchemy
 from sqlalchemy.dialects.postgresql.base import PGDialect, UUID
 from sqlalchemy.dialects.postgresql.json import JSONB
 from sqlalchemy.dialects.mssql.base import MSDialect, UNIQUEIDENTIFIER
 from sqlalchemy.dialects.mysql.base import MySQLDialect
-from sqlalchemy.types import TypeDecorator, DateTime, Unicode, CHAR, NVARCHAR, VARCHAR, UnicodeText, NUMERIC, TIMESTAMP, DATETIME, JSON, SMALLINT, VARBINARY
 
 from databend_sqlalchemy import databend_dialect
+from databend_sqlalchemy.types import (GEOMETRY, GEOGRAPHY, BITMAP, DOUBLE, TINYINT)
 
 try:
     from sqlalchemy_hana.dialect import HANAHDBCLIDialect
@@ -257,12 +261,12 @@ class PlaidTinyInt(TypeDecorator):
             str: Type Descriptor
         """
         if is_dialect_databend_based(dialect):
-            return dialect.type_descriptor(databend_dialect.TINYINT)
+            return dialect.type_descriptor(TINYINT)
 
         return self.impl
 
 class PlaidGeometry(TypeDecorator):
-    impl = databend_dialect.GEOMETRY
+    impl = GEOMETRY
     cache_ok = True
 
     def load_dialect_impl(self, dialect):
@@ -273,7 +277,7 @@ class PlaidGeometry(TypeDecorator):
 
 
 class PlaidGeography(TypeDecorator):
-    impl = databend_dialect.GEOGRAPHY
+    impl = GEOGRAPHY
     cache_ok = True
 
     def load_dialect_impl(self, dialect):
