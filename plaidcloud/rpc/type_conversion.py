@@ -357,6 +357,7 @@ _sqlalchemy_from_dtype = regex_map({
     r'^s1024$': PlaidUnicode(1024),
     r'^object$': TEXT,
     r'^text$':  PlaidUnicode(4000),
+    r'^varchar$': TEXT,
     r'^string$': PlaidUnicode(4000),
     r'^serial$': INTEGER,
     r'^bigserial$': BIGINT,
