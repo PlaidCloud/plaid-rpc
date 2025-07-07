@@ -46,8 +46,10 @@ test = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/PlaidCloud/plaidcloud-rpc"
-Issues = "https://github.com/PlaidCloud/plaidcloud-rpc/issues"
+Homepage = "https://plaidcloud.com"
+Documentation = "https://docs.plaidcloud.com"
+Repository = "https://github.com/PlaidCloud/plaid-rpc.git"
+Issues = "https://github.com/PlaidCloud/plaid-rpc/issues"
 
 [tool.black]
 line-length = 125
