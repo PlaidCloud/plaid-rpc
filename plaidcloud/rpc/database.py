@@ -22,8 +22,7 @@ from sqlalchemy.dialects.postgresql.base import PGDialect, UUID
 from sqlalchemy.dialects.postgresql.json import JSONB
 from sqlalchemy.dialects.mssql.base import MSDialect, UNIQUEIDENTIFIER
 from sqlalchemy.dialects.mysql.base import MySQLDialect
-from sqlalchemy.types import (TypeDecorator, DateTime, Unicode, CHAR, TEXT, NVARCHAR, VARCHAR,
-                              UnicodeText, NUMERIC, TIMESTAMP, DATETIME, JSON, SMALLINT, VARBINARY)
+from sqlalchemy.types import TypeDecorator, DateTime, Unicode, CHAR, NVARCHAR, VARCHAR, UnicodeText, NUMERIC, TIMESTAMP, DATETIME, JSON, SMALLINT, VARBINARY
 
 from databend_sqlalchemy import databend_dialect
 
@@ -263,7 +262,7 @@ class PlaidTinyInt(TypeDecorator):
         return self.impl
 
 class PlaidGeometry(TypeDecorator):
-    impl = databend_dialect.DatabendGeometry
+    impl = databend_dialect.GEOMETRY
     cache_ok = True
 
     def load_dialect_impl(self, dialect):
@@ -274,7 +273,7 @@ class PlaidGeometry(TypeDecorator):
 
 
 class PlaidGeography(TypeDecorator):
-    impl = databend_dialect.DatabendGeography
+    impl = databend_dialect.GEOGRAPHY
     cache_ok = True
 
     def load_dialect_impl(self, dialect):

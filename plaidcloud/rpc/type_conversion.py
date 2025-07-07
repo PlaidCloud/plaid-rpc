@@ -1,8 +1,5 @@
 #!/usr/bin/env python
-import re
-
 import sqlalchemy
-from sqlalchemy import types as sqltypes
 
 # Check SQLAlchemy version
 if sqlalchemy.__version__.startswith('2.'):
@@ -13,7 +10,6 @@ else:
 from sqlalchemy import (
     BIGINT, INTEGER, SMALLINT, TEXT, Boolean, Interval, Date, Time, FLOAT
 )
-from sqlalchemy import types as sqltypes
 from sqlalchemy.sql.sqltypes import LargeBinary
 
 
