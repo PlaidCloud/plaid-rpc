@@ -263,7 +263,7 @@ class PlaidTinyInt(TypeDecorator):
         return self.impl
 
 class PlaidGeometry(TypeDecorator):
-    impl = databend_dialect.GEOMETRY
+    impl = databend_dialect.DatabendGeometry
     cache_ok = True
 
     def load_dialect_impl(self, dialect):
@@ -274,7 +274,7 @@ class PlaidGeometry(TypeDecorator):
 
 
 class PlaidGeography(TypeDecorator):
-    impl = databend_dialect.GEOGRAPHY
+    impl = databend_dialect.DatabendGeography
     cache_ok = True
 
     def load_dialect_impl(self, dialect):
