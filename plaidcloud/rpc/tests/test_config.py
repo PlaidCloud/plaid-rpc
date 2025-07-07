@@ -5,7 +5,7 @@ import unittest
 import pytest
 
 from plaidcloud.rpc.config import PlaidConfig
-
+import databend_sqlalchemy
 __author__ = "Pat Buxton"
 __copyright__ = "© Copyright 2022, Tartan Solutions, Inc"
 __credits__ = ["Pat Buxton"]
@@ -19,6 +19,7 @@ class TestConfigWithNoPaths(unittest.TestCase):
 
     def setUp(self):
         self.config = PlaidConfig(config_path='plaidcloud/rpc/tests/.plaid/plaid.conf')
+        print(databend_sqlalchemy.__version__)
 
     def test_paths_is_empty(self):
         assert self.config.paths == {}
