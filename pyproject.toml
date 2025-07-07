@@ -1,8 +1,132 @@
 [build-system]
-requires = ["setuptools >= 40.0.0"]
+requires = ["setuptools"]
 build-backend = "setuptools.build_meta"
+
+[project]
+name = "plaidcloud-rpc"
+version = "1.6.1"
+authors = [
+    {name = "Michael Rea", email = "mike@plaidcloud.com"},
+    {name = "Paul Morel", email = "paul@plaidcloud.com"},
+]
+maintainers = [
+    {name = "Pat Buxton", email = "pat@plaidcloud.com"},
+    {name = "Charlie Laymon", email = "charlie@plaidcloud.com"},
+    {name = "Simon Moscrop", email = "simon@plaidcloud.com"},
+]
+description = "PlaidCloud RPC Connection tools and helpers"
+requires-python = ">=3.10"
+keywords = ["plaidcloud", "rpc", "connection"]
+license = "Apache-2.0"
+license-files = ["LICENSE"]
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+]
+dynamic = ["readme", "dependencies"]
+
+[tool.setuptools.dynamic]
+readme = {file = ["README.md"], content-type = "text/markdown"}
+dependencies = {file = ["requirements.txt"]}
+
+[project.optional-dependencies]
+test = [
+    "pytest",
+    "mock",
+    "minimock",
+    "pytest-cov",
+    "pytest-runner",
+    "sqlalchemy-greenplum",
+    "sqlalchemy-hana",
+    "starrocks",
+    "snowflake-sqlalchemy"
+]
+
+[project.urls]
+Homepage = "https://plaidcloud.com"
+Documentation = "https://docs.plaidcloud.com"
+Repository = "https://github.com/PlaidCloud/plaid-rpc.git"
+Issues = "https://github.com/PlaidCloud/plaid-rpc/issues"
 
 [tool.black]
 line-length = 125
-target-version = ['py311']
+target-version = ['py312']
 skip-string-normalization = true
+
+[tool.pytest.ini_options]
+# addopts = "-v --maxfail=25 -p no:warnings -p no:logging --doctest-modules"
+addopts = "--tb=native -v -r sfxX --maxfail=25 -p no:warnings -p no:logging --doctest-modules --cov=. --cov-report=xml --junitxml=pytestresult.xml"
+
+[tool.coverage.run]
+omit = ["plaidcloud/rpc/tests/*"]
+
+[tool.coverage.report]
+include = ["./plaidcloud/*"]
+
+# Can be moved from liccheck.ini if we want
+#[tool.liccheck]
+#authorized_licenses = [
+#    "artistic",
+#    "3-clause bsd",
+#    "3-clause bsd <http://www.opensource.org/licenses/bsd-license.php>",
+#    "bsd",
+#    "bsd 3-clause",
+#    "bsd-3-clause",
+#    "new bsd",
+#    "bsd license",
+#    "new bsd license",
+#    "simplified bsd",
+#    "apache",
+#    "apache 2.0",
+#    "apache-2.0",
+#    "apache license 2.0",
+#    "apache licence v2.0",
+#    "apache license, version 2.0",
+#    "apache software",
+#    "apache software license",
+#    "asl 2",
+#    "cc0 1.0 universal (cc0 1.0) public domain dedication",
+#    "hpnd",
+#    "historical permission notice and disclaimer (hpnd)",
+#    "gnu library or lesser general public license (lgpl)",
+#    "gnu Lesser general public license v2 or later (lgplv2+)",
+#    "gnu lesser general public license (lgpl), version 3",
+#    "gnu lesser general public license v3 (lgplv3)",
+#    "gnu general public license (gpl)",
+#    "gnu lgpl",
+#    "lgpl",
+#    "lgpl with exceptions or zpl",
+#    "isc",
+#    "isc license",
+#    "isc license (iscl)",
+#    "mit",
+#    "mit and python-2.0",
+#    "mit/x11",
+#    "mit license",
+#    "mozilla public license",
+#    "mozilla public license 1.1 (mpl 1.1)",
+#    "mozilla public license 2.0 (mpl 2.0)",
+#    "mpl-2.0",
+#    "psf-2.0",
+#    "psfl",
+#    "python software foundation",
+#    "python software foundation license",
+#    "zpl 2.1",
+#    "zope public",
+#]
+#unauthorized_licenses = [
+#    "gpl",
+#    "gpl v3",
+#]
+#dependencies = true # to load [project.dependencies]
+#optional_dependencies = ["test"] # to load extras from [project.optional-dependencies]
+#
+#[tool.liccheck.authorized_packages]
+#uuid = "1.30"
+#plaidcloud-rpc = ">=1.0.0"
+#plaidcloud-utilities = ">=1.0.0"
+#sqlalchemy-greenplum = ">=0.1.0"
+#hdbcli = ">=0.5.0"
