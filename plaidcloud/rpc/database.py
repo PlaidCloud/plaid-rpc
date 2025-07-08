@@ -247,6 +247,7 @@ class PlaidUnicode(TypeDecorator):
 
 
 class PlaidTinyInt(TypeDecorator):
+    """8 Bit numeric Type that implements as TinyInt on Databend"""
     impl = SMALLINT
     cache_ok = True
 
@@ -265,6 +266,7 @@ class PlaidTinyInt(TypeDecorator):
         return self.impl
 
 class PlaidGeometry(TypeDecorator):
+    """Spatial type for implementing Geometry on Databend"""
     impl = databend_dialect.GEOMETRY
     cache_ok = True
 
@@ -276,6 +278,7 @@ class PlaidGeometry(TypeDecorator):
 
 
 class PlaidGeography(TypeDecorator):
+    """Spatial type for implementing Geography on Databend"""
     impl = databend_dialect.GEOGRAPHY
     cache_ok = True
 
@@ -310,6 +313,7 @@ class PlaidJSON(TypeDecorator):
         return self.impl
 
 class PlaidBitmap(TypeDecorator):
+    """A binary data type used to represent a set of values, where each bit represents the presence or absence of a value"""
     impl = VARBINARY
     cache_ok = True
 
