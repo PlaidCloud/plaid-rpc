@@ -28,7 +28,6 @@ from sqlalchemy.dialects.mssql.base import MSDialect, UNIQUEIDENTIFIER
 from sqlalchemy.dialects.mysql.base import MySQLDialect
 
 from databend_sqlalchemy import databend_dialect
-from databend_sqlalchemy.types import (GEOMETRY, GEOGRAPHY, BITMAP, DOUBLE, TINYINT)
 
 try:
     from sqlalchemy_hana.dialect import HANAHDBCLIDialect
@@ -261,12 +260,12 @@ class PlaidTinyInt(TypeDecorator):
             str: Type Descriptor
         """
         if is_dialect_databend_based(dialect):
-            return dialect.type_descriptor(TINYINT)
+            return dialect.type_descriptor(databend_dialect.TINYINT)
 
         return self.impl
 
 class PlaidGeometry(TypeDecorator):
-    impl = GEOMETRY
+    impl = databend_dialect.GEOMETRY
     cache_ok = True
 
     def load_dialect_impl(self, dialect):
@@ -277,7 +276,7 @@ class PlaidGeometry(TypeDecorator):
 
 
 class PlaidGeography(TypeDecorator):
-    impl = GEOGRAPHY
+    impl = databend_dialect.GEOGRAPHY
     cache_ok = True
 
     def load_dialect_impl(self, dialect):

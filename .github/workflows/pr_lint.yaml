@@ -17,9 +17,6 @@ jobs:
         uses: actions/checkout@v4
       - name: Install dependencies
         run: pip install -e .[test]; pip install -q pylint==${{ secrets.PYLINT_VERSION }};
-      - name: Test file contents
-        run: |
-          cat /opt/hostedtoolcache/Python/3.12.11/x64/lib/python3.12/site-packages/databend_sqlalchemy/types.py
       - name: License Checker
         uses: andersy005/gh-action-py-liccheck@main
         with:
