@@ -1,7 +1,7 @@
 bleach
 chardet>=2.3.0
 comtypes;platform_system=="Windows"
-git+https://github.com/PlaidCloud/databend-sqlalchemy.git@main#egg=databend_sqlalchemy
+databend_sqlalchemy @ git+https://github.com/PlaidCloud/databend-sqlalchemy.git@main#egg=databend_sqlalchemy
 packaging
 psycopg2-binary
 pyarrow
