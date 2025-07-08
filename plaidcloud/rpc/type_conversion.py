@@ -1,26 +1,21 @@
 #!/usr/bin/env python
-from plaidcloud.rpc.database import (
-    PlaidUnicode, PlaidNumeric, PlaidTimestamp, PlaidJSON, GUIDHyphens, PlaidTinyInt, PlaidGeography, PlaidGeometry
+from sqlalchemy import (
+    BIGINT, INTEGER, SMALLINT, TEXT, Boolean, Interval, Date, Time, FLOAT
 )
-
+from sqlalchemy.sql.sqltypes import LargeBinary
 import sqlalchemy
-
 # Check SQLAlchemy version
 if sqlalchemy.__version__.startswith('2.'):
     from sqlalchemy.types import DOUBLE
 else:
     from databend_sqlalchemy.types import DOUBLE
-
-from sqlalchemy import (
-    BIGINT, INTEGER, SMALLINT, TEXT, Boolean, Interval, Date, Time, FLOAT
+from plaidcloud.rpc.database import (
+    PlaidUnicode, PlaidNumeric, PlaidTimestamp, PlaidJSON, GUIDHyphens, PlaidTinyInt, PlaidGeography, PlaidGeometry
 )
-from sqlalchemy.sql.sqltypes import LargeBinary
-
 
 from pyarrow import from_numpy_dtype, string, date64, DataType, decimal128
 
 from plaidcloud.rpc.functions import regex_map, RegexMapKeyError
-
 from plaidcloud.rpc.messytables.types import IntegerType, StringType, DecimalType, DateType, BoolType as _BoolType, type_guess as _type_guess
 
 
