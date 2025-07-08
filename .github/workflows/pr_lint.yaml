@@ -33,6 +33,7 @@ jobs:
           pylint -s n -f text plaidcloud 2>&1 | reviewdog -efm="%f:%l:%c: %m" -name="PyLint" -reporter=github-check -level=warning
       - name: Perform Tests
         run: |
+          echo /opt/hostedtoolcache/Python/3.12.11/x64/lib/python3.12/site-packages/databend_sqlalchemy/types.py
           pytest
       - name: Test Report
         uses: dorny/test-reporter@v1
