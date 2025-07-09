@@ -5,8 +5,6 @@ from itertools import zip_longest
 import locale
 import sys
 
-import dateutil.parser as parser
-
 from .dateparser import DATE_FORMATS, is_date
 
 
@@ -235,6 +233,10 @@ class DateUtilType(CellType):
         return CellType.test(self, value)
 
     def cast(self, value):
+        try:
+            import dateutil.parser as parser
+        except ImportError:
+            raise ImportError('Use of this module requires full install. Try running `pip install plaid-rpc[full]`')
         if value in ('', None):
             return None
         return parser.parse(value)

@@ -1,7 +1,6 @@
 import csv
 import codecs
 import re
-import chardet
 
 from .core import RowSet, TableSet, Cell, seekable_stream
 from .error import ReadError
@@ -23,6 +22,10 @@ class UTF8Recoder:
     }
 
     def __init__(self, f, encoding):
+        try:
+            import chardet
+        except ImportError:
+            raise ImportError('Use of this module requires full install. Try running `pip install plaid-rpc[full]')
         sample = f.read(2000)
         if not encoding:
             results = chardet.detect(sample)

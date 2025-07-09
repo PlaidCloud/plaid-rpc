@@ -1,12 +1,7 @@
 bleach
-chardet>=2.3.0
 comtypes;platform_system=="Windows"
-databend_sqlalchemy>=0.5.2
 packaging
-psycopg2-binary
 pyarrow
-python-dateutil>=1.5.0
-python-magic>=0.4.12
 PyJWT
 PyYAML
 requests
