@@ -235,8 +235,8 @@ class DateUtilType(CellType):
     def cast(self, value):
         try:
             import dateutil.parser as parser
-        except ImportError:
-            raise ImportError('Use of this module requires full install. Try running `pip install plaid-rpc[full]`')
+        except ImportError as exc:
+            raise ImportError('Use of this module requires full install. Try running `pip install plaid-rpc[full]`') from exc
         if value in ('', None):
             return None
         return parser.parse(value)
