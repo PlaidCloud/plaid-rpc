@@ -35,7 +35,7 @@ dependencies = {file = ["requirements.txt"]}
 [project.optional-dependencies]
 test = [
     "chardet>=2.3.0",
-    "databend_sqlalchemy>=0.5.2",
+    "databend_sqlalchemy",
     "pytest",
     "mock",
     "minimock",
@@ -51,7 +51,7 @@ test = [
 ]
 full = [
     "chardet>=2.3.0",
-    "databend_sqlalchemy>=0.5.2",
+    "databend_sqlalchemy",
     "psycopg2-binary",
     "python-dateutil>=1.5.0",
     "python-magic>=0.4.12",
