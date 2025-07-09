@@ -114,7 +114,7 @@ class Cell(object):
 
     def __init__(self, value, column=None, type=None):
         if type is None:
-            from messytables.types import StringType
+            from .types import StringType
             type = StringType()
         self.value = value
         self.column = column
