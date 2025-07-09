@@ -34,11 +34,16 @@ dependencies = {file = ["requirements.txt"]}
 
 [project.optional-dependencies]
 test = [
+    "chardet>=2.3.0",
+    "databend_sqlalchemy>=0.5.2",
     "pytest",
     "mock",
     "minimock",
+    "psycopg2-binary",
     "pytest-cov",
     "pytest-runner",
+    "python-dateutil>=1.5.0",
+    "python-magic>=0.4.12",
     "sqlalchemy-greenplum",
     "sqlalchemy-hana",
     "starrocks",
