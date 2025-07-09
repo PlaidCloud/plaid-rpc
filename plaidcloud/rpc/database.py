@@ -17,13 +17,18 @@ import queue
 import csv
 from operator import attrgetter
 
+from sqlalchemy.types import (TypeDecorator, DateTime, Unicode, CHAR, NVARCHAR, VARCHAR, UnicodeText, NUMERIC,
+                              TIMESTAMP, DATETIME, JSON, SMALLINT, VARBINARY)
+
+
 import sqlalchemy
 from sqlalchemy.dialects.postgresql.base import PGDialect, UUID
 from sqlalchemy.dialects.postgresql.json import JSONB
 from sqlalchemy.dialects.mssql.base import MSDialect, UNIQUEIDENTIFIER
 from sqlalchemy.dialects.mysql.base import MySQLDialect
-from sqlalchemy.types import (TypeDecorator, DateTime, Unicode, CHAR, TEXT, NVARCHAR, VARCHAR,
-                              UnicodeText, NUMERIC, TIMESTAMP, DATETIME, JSON)
+
+from databend_sqlalchemy import databend_dialect
+
 try:
     from sqlalchemy_hana.dialect import HANAHDBCLIDialect
 except ImportError:
@@ -214,6 +219,7 @@ class PlaidNumeric(TypeDecorator):
         else:
             return self.impl
 
+
 class PlaidUnicode(TypeDecorator):
     """Unicode Type that implements as UnicodeText on Postgresql based environments
 
@@ -239,6 +245,50 @@ class PlaidUnicode(TypeDecorator):
 
         return self.impl
 
+
+class PlaidTinyInt(TypeDecorator):
+    """8 Bit numeric Type that implements as TinyInt on Databend"""
+    impl = SMALLINT
+    cache_ok = True
+
+    def load_dialect_impl(self, dialect):
+        """Loads the dialect implementation
+        Note:
+            Implement as SMALLINT if not using Databend
+        Args:
+            dialect (Dialect): SQLAlchemy dialect
+        Returns:
+            str: Type Descriptor
+        """
+        if is_dialect_databend_based(dialect):
+            return dialect.type_descriptor(databend_dialect.TINYINT)
+
+        return self.impl
+
+class PlaidGeometry(TypeDecorator):
+    """Spatial type for implementing Geometry on Databend"""
+    impl = databend_dialect.GEOMETRY
+    cache_ok = True
+
+    def load_dialect_impl(self, dialect):
+        if not is_dialect_databend_based(dialect):
+            raise NotImplementedError('PlaidGeometry is only supported on Databend')
+
+        return self.impl
+
+
+class PlaidGeography(TypeDecorator):
+    """Spatial type for implementing Geography on Databend"""
+    impl = databend_dialect.GEOGRAPHY
+    cache_ok = True
+
+    def load_dialect_impl(self, dialect):
+        if not is_dialect_databend_based(dialect):
+            raise NotImplementedError('PlaidGeography is only supported on Databend')
+
+        return self.impl
+
+
 class PlaidJSON(TypeDecorator):
     """JSON type that implements as JSONB on Postgresql based environments
 
@@ -262,6 +312,24 @@ class PlaidJSON(TypeDecorator):
 
         return self.impl
 
+class PlaidBitmap(TypeDecorator):
+    """A binary data type used to represent a set of values, where each bit represents the presence or absence of a value"""
+    impl = VARBINARY
+    cache_ok = True
+
+    def load_dialect_impl(self, dialect):
+        """Loads the dialect implementation
+        Note:
+            Implement as VARBINARY if not using Databend
+        Args:
+            dialect (Dialect): SQLAlchemy dialect
+        Returns:
+            str: Type Descriptor
+        """
+        if is_dialect_databend_based(dialect):
+            return dialect.type_descriptor(databend_dialect.BITMAP)
+
+        return self.impl
 
 def text_repr(val):
     """Format values in a way that can be written as text to disk.

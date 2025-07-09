@@ -5,7 +5,6 @@ import unittest
 import pytest
 
 from plaidcloud.rpc.config import PlaidConfig
-
 __author__ = "Pat Buxton"
 __copyright__ = "© Copyright 2022, Tartan Solutions, Inc"
 __credits__ = ["Pat Buxton"]
