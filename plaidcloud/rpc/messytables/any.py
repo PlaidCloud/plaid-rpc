@@ -3,6 +3,7 @@ import re
 from .zip import ZIPTableSet
 from .commas import CSVTableSet
 from .error import ReadError
+from .core import seekable_stream
 
 
 MIMELOOKUP = {
@@ -62,7 +63,7 @@ def get_mime(fileobj):
     import magic
     # Since we need to peek the start of the stream, make sure we can
     # seek back later. If not, slurp in the contents into a StringIO.
-    fileobj = messytables.seekable_stream(fileobj)
+    fileobj = seekable_stream(fileobj)
     header = fileobj.read(4096)
     mimetype = magic.from_buffer(header, mime=True)
     fileobj.seek(0)
