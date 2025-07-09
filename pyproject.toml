@@ -44,6 +44,13 @@ test = [
     "starrocks",
     "snowflake-sqlalchemy"
 ]
+full = [
+    "chardet>=2.3.0",
+    "databend_sqlalchemy>=0.5.2",
+    "psycopg2-binary",
+    "python-dateutil>=1.5.0",
+    "python-magic>=0.4.12",
+]
 
 [project.urls]
 Homepage = "https://plaidcloud.com"
