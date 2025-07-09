@@ -24,8 +24,8 @@ class UTF8Recoder:
     def __init__(self, f, encoding):
         try:
             import chardet
-        except ImportError:
-            raise ImportError('Use of this module requires full install. Try running `pip install plaid-rpc[full]')
+        except ImportError as exc:
+            raise ImportError('Use of this module requires full install. Try running `pip install plaid-rpc[full]') from exc
         sample = f.read(2000)
         if not encoding:
             results = chardet.detect(sample)

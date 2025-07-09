@@ -62,8 +62,8 @@ def clean_ext(filename):
 def get_mime(fileobj):
     try:
         import magic
-    except ImportError:
-        raise ImportError('Use of this module requires full install. Try running `pip install plaid-rpc[full]`')
+    except ImportError as exc:
+        raise ImportError('Use of this module requires full install. Try running `pip install plaid-rpc[full]`') from exc
     # Since we need to peek the start of the stream, make sure we can
     # seek back later. If not, slurp in the contents into a StringIO.
     fileobj = seekable_stream(fileobj)
