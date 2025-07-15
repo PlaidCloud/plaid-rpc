@@ -27,7 +27,10 @@ from sqlalchemy.dialects.postgresql.json import JSONB
 from sqlalchemy.dialects.mssql.base import MSDialect, UNIQUEIDENTIFIER
 from sqlalchemy.dialects.mysql.base import MySQLDialect
 
-from databend_sqlalchemy import databend_dialect
+try:
+    from databend_sqlalchemy import databend_dialect
+except ImportError:
+    databend_dialect = None
 
 try:
     from sqlalchemy_hana.dialect import HANAHDBCLIDialect
@@ -267,11 +270,11 @@ class PlaidTinyInt(TypeDecorator):
 
 class PlaidGeometry(TypeDecorator):
     """Spatial type for implementing Geometry on Databend"""
-    impl = databend_dialect.GEOMETRY
+    impl = databend_dialect.GEOMETRY if databend_dialect else None # type: ignore
     cache_ok = True
 
     def load_dialect_impl(self, dialect):
-        if not is_dialect_databend_based(dialect):
+        if self.impl is None or not is_dialect_databend_based(dialect):
             raise NotImplementedError('PlaidGeometry is only supported on Databend')
 
         return self.impl
@@ -279,11 +282,11 @@ class PlaidGeometry(TypeDecorator):
 
 class PlaidGeography(TypeDecorator):
     """Spatial type for implementing Geography on Databend"""
-    impl = databend_dialect.GEOGRAPHY
+    impl = databend_dialect.GEOGRAPHY if databend_dialect else None # type: ignore
     cache_ok = True
 
     def load_dialect_impl(self, dialect):
-        if not is_dialect_databend_based(dialect):
+        if self.impl is None or not is_dialect_databend_based(dialect):
             raise NotImplementedError('PlaidGeography is only supported on Databend')
 
         return self.impl
