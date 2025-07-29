@@ -13,7 +13,6 @@ from plaidcloud.rpc.database import (
     PlaidUnicode, PlaidNumeric, PlaidTimestamp, PlaidJSON, GUIDHyphens, PlaidTinyInt, PlaidGeography, PlaidGeometry
 )
 
-from pyarrow import from_numpy_dtype, string, date64, DataType, decimal128
 
 from plaidcloud.rpc.functions import regex_map, RegexMapKeyError
 from plaidcloud.rpc.messytables.types import IntegerType, StringType, DecimalType, DateType, BoolType as _BoolType, type_guess as _type_guess
@@ -117,7 +116,7 @@ _PANDAS_DTYPE_FROM_SQL = regex_map({
     r'^json*$': 'object',
 })
 
-def arrow_type_from_analyze_type(dtype: str, use_decimal_type: bool = False) -> DataType:
+def arrow_type_from_analyze_type(dtype: str, use_decimal_type: bool = False):
     """Returns an arrow/parquet type given an analyze type
 
     Args:
@@ -129,6 +128,10 @@ def arrow_type_from_analyze_type(dtype: str, use_decimal_type: bool = False) -> 
     Returns:
         DataType: The arrow/parquet type that matches `dtype`
     """
+    try:
+        from pyarrow import from_numpy_dtype, string, date64, decimal128
+    except ImportError as exc:
+        raise ImportError('Use of this method requires full install. Try running `pip install plaid-rpc[full]`') from exc
     if dtype == 'date':
         # Special case. Pandas treats all date types as timestamp, arrow needs to specify
         return date64()

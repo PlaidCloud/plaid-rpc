@@ -1,7 +1,6 @@
 bleach
 comtypes;platform_system=="Windows"
 packaging
-pyarrow
 PyJWT
 PyYAML
 requests
