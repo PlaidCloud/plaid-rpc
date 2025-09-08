@@ -129,12 +129,15 @@ def arrow_type_from_analyze_type(dtype: str, use_decimal_type: bool = False):
         DataType: The arrow/parquet type that matches `dtype`
     """
     try:
-        from pyarrow import from_numpy_dtype, string, date64, decimal128
+        from pyarrow import from_numpy_dtype, string, date64, decimal128, json_
     except ImportError as exc:
         raise ImportError('Use of this method requires full install. Try running `pip install plaid-rpc[full]`') from exc
     if dtype == 'date':
         # Special case. Pandas treats all date types as timestamp, arrow needs to specify
         return date64()
+    if dtype.startswith('json'):
+        # Numpy treats this like a generic object, specify json
+        return json_()
     np_type = pandas_dtype_from_sql(dtype)
     if np_type == 'object':
         # Fall back to string
