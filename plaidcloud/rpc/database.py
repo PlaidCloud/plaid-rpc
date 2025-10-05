@@ -18,7 +18,7 @@ import csv
 from operator import attrgetter
 
 from sqlalchemy.types import (TypeDecorator, DateTime, Unicode, CHAR, NVARCHAR, VARCHAR, UnicodeText, NUMERIC,
-                              TIMESTAMP, DATETIME, JSON, SMALLINT, VARBINARY)
+                              TIMESTAMP, DATETIME, JSON, SMALLINT, VARBINARY, DECIMAL)
 
 
 import sqlalchemy
@@ -216,6 +216,8 @@ class PlaidNumeric(TypeDecorator):
             dialect (Dialect): SQLAlchemy dialect
         Returns:
             str: Type Descriptor"""
+        if is_dialect_starrocks_based(dialect):
+            return dialect.type_descriptor(DECIMAL(38, 10, asdecimal=True))
         if is_dialect_sql_server_based(dialect) or is_dialect_mysql_based(dialect) or is_dialect_snowflake_based(dialect):
             return_decimals = not is_dialect_snowflake_based(dialect)  # Needed for snowflake, potentially useful for others.
             return dialect.type_descriptor(NUMERIC(38, 10, asdecimal=return_decimals))
