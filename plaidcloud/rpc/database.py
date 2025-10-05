@@ -192,15 +192,15 @@ class PlaidTimestamp(TypeDecorator):
     def load_dialect_impl(self, dialect):
         """Loads the dialect implementation
         Note:
-            Implement as DATETIME in SQL Server
+            Implement as DATETIME in SQL Server and Starrocks
         Args:
             dialect (Dialect): SQLAlchemy dialect
         Returns:
             str: Type Descriptor"""
-        if is_dialect_sql_server_based(dialect):
+        if is_dialect_starrocks_based(dialect) or is_dialect_sql_server_based(dialect):
             return dialect.type_descriptor(DATETIME)
-        else:
-            return self.impl
+
+        return self.impl
 
 
 class PlaidNumeric(TypeDecorator):
@@ -877,4 +877,3 @@ def get_compiled_table_name(engine, schema, table_name):
     """
     target = sqlalchemy.Table(table_name, sqlalchemy.MetaData(), schema=schema)
     return engine.dialect.identifier_preparer.format_table(target)
-
