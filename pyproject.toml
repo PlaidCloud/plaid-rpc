@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "plaidcloud-rpc"
-version = "1.6.7"
+version = "1.6.8"
 authors = [
     {name = "Michael Rea", email = "mike@plaidcloud.com"},
     {name = "Paul Morel", email = "paul@plaidcloud.com"},
