@@ -231,3 +231,7 @@ class SimpleRPC(PlainRPCCommon):
         if callable(self.__auth_token):
             return self.__auth_token()
         return self.__auth_token
+
+    @auth_token.setter
+    def auth_token(self, token: str):
+        self.__auth_token = token
