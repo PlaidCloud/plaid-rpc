@@ -222,6 +222,10 @@ class SimpleRPC(PlainRPCCommon):
     def rpc_uri(self):
         return self.__rpc_uri
 
+    @rpc_uri.setter
+    def rpc_uri(self, uri: str):
+        self.__rpc_uri = uri
+
     @property
     def auth_token(self):
         if callable(self.__auth_token):
