@@ -42,6 +42,7 @@ _ANALYZE_TYPE = regex_map({
         r'^smallint$': 'smallint',  # 2 bytes
         r'^int32$': 'integer',  # 4 bytes
         r'^integer$': 'integer',
+        r'^integer.*': 'integer',
         r'^int64$': 'bigint',  # 8 bytes
         r'^bigint$': 'bigint',
         r'^float\d*': 'numeric',
