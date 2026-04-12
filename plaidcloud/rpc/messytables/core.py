@@ -209,6 +209,8 @@ class RowSet(object):
     On any fatal errors, it should raise messytables.ReadError
     """
 
+    name = None
+
     def __init__(self, typed=False):
         self.typed = typed
         self._processors = []
