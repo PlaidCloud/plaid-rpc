@@ -33,7 +33,7 @@ def makedirs(path):
             raise
 
 
-def set_windows_hidden(path):
+def set_windows_hidden(path):  # pragma: no cover
     """Set hidden flag on file using FILE_ATTRIBUTE_HIDDEN=0x2 according to
     http://msdn.microsoft.com/en-us/library/windows/desktop/aa365535.aspx
 
@@ -46,7 +46,6 @@ def set_windows_hidden(path):
     Returns:
         int: The return code sent by the OS
     """
-
     FILE_ATTRIBUTES_HIDDEN = 0x2
 
     # API call requirements: Unicode, proper Windows backslashes

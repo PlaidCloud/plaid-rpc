@@ -243,3 +243,100 @@ class TestLogger(unittest.TestCase):
 
     def tearDown(self):
         pass
+
+
+class TestLogHandlerInitBranches(unittest.TestCase):
+    """Exercise the project/workflow/step init branches — mocking env dict."""
+
+    def setUp(self):
+        self.mock_rpc = get_mock_rpc()
+
+    def _make_handler(self, **kwargs):
+        # Make sure env vars are present so fallbacks work without Connect()
+        env = dict(FAKE_ENVIRON)
+        with mock.patch.dict(os.environ, env, clear=False):
+            return logger.LogHandler(rpc=self.mock_rpc, **kwargs)
+
+    def test_init_project_uuid_direct(self):
+        project_id = str(uuid.uuid4())
+        handler = self._make_handler(project=project_id)
+        self.assertEqual(handler.project_id, project_id)
+
+    def test_init_project_by_path(self):
+        handler = self._make_handler(project='/path/project')
+        self.assertEqual(handler.project_id, 'project_id_from_path')
+
+    def test_init_project_by_name(self):
+        handler = self._make_handler(project='my_proj')
+        self.assertEqual(handler.project_id, 'project_id_from_name')
+
+    def test_init_workflow_uuid(self):
+        workflow_id = str(uuid.uuid4())
+        handler = self._make_handler(workflow=workflow_id)
+        self.assertEqual(handler.workflow_id, workflow_id)
+
+    def test_init_workflow_by_path(self):
+        handler = self._make_handler(workflow='/a/b')
+        self.assertEqual(handler.workflow_id, 'workflow_id_from_path')
+
+    def test_init_workflow_by_name(self):
+        handler = self._make_handler(workflow='wf_name')
+        self.assertEqual(handler.workflow_id, 'workflow_id_from_name')
+
+    def test_init_step_returns_existing(self):
+        # When rpc.analyze.step.step returns truthy, it means the step exists
+        self.mock_rpc.analyze.step.step = mock.Mock(return_value={'exists': True})
+        handler = self._make_handler(step='step_xyz')
+        self.assertEqual(handler.step_id, 'step_xyz')
+
+    def test_init_step_by_path(self):
+        self.mock_rpc.analyze.step.step = mock.Mock(return_value=None)
+        handler = self._make_handler(step='/path')
+        self.assertEqual(handler.step_id, 'step_id_from_path')
+
+    def test_init_step_by_name(self):
+        self.mock_rpc.analyze.step.step = mock.Mock(return_value=None)
+        handler = self._make_handler(step='s_name')
+        self.assertEqual(handler.step_id, 'step_id_from_name')
+
+
+class TestLogHandlerEmitFailure(unittest.TestCase):
+    """Test that emit swallows errors rather than raising."""
+
+    def test_emit_exception_is_swallowed(self):
+        mock_rpc = get_mock_rpc()
+        mock_rpc.analyze.step.log = mock.Mock(side_effect=RuntimeError('rpc boom'))
+        with mock.patch.dict(os.environ, FAKE_ENVIRON):
+            handler = logger.LogHandler(rpc=mock_rpc)
+            # Should not raise
+            handler.emit(logging.makeLogRecord({}))
+
+
+class TestLogHandlerEnvFallback(unittest.TestCase):
+    """Cover the env var fallback for workflow/step when none are passed."""
+
+    def test_missing_workflow_env_sets_none(self):
+        mock_rpc = get_mock_rpc()
+        # Remove env vars so fallback triggers the except: None branch
+        env = dict(FAKE_ENVIRON)
+        env.pop('__PLAID_WORKFLOW_ID__', None)
+        env.pop('__PLAID_STEP_ID__', None)
+        with mock.patch.dict(os.environ, env, clear=True):
+            os.environ['__PLAID_PROJECT_ID__'] = 'project_id'
+            handler = logger.LogHandler(rpc=mock_rpc)
+            self.assertIsNone(handler.workflow_id)
+            self.assertIsNone(handler.step_id)
+
+
+class TestLogHandlerDefaultsConnect(unittest.TestCase):
+    """Cover the `self.rpc = Connect()` default branch."""
+
+    def test_default_rpc_creates_connect(self):
+        # Need to mock Connect at module level to avoid filesystem operations
+        with mock.patch('plaidcloud.rpc.logger.Connect') as mock_connect_cls, \
+             mock.patch.dict(os.environ, FAKE_ENVIRON):
+            mock_instance = get_mock_rpc()
+            mock_connect_cls.return_value = mock_instance
+            handler = logger.LogHandler()
+            mock_connect_cls.assert_called_once()
+            self.assertIs(handler.rpc, mock_instance)

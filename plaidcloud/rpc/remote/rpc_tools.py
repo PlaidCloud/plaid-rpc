@@ -41,7 +41,7 @@ def direct_rpc(auth_id, method, params, logger=None, sequence=None):
         logger.info(f'Start "{method}" {sequence if sequence is not None else ""}')
     try:
         if asyncio.iscoroutinefunction(callable_object):
-            result = asyncio.get_event_loop().run_until_complete(callable_object(auth_id=auth_id, **params))
+            result = asyncio.run(callable_object(auth_id=auth_id, **params))
         else:
             result = callable_object(auth_id=auth_id, **params)
         if isinstance(result, types.GeneratorType):
@@ -68,7 +68,7 @@ async def direct_rpc_async(auth_id, method, params, logger=None, sequence=None):
         if asyncio.iscoroutinefunction(callable_object):
             if use_thread:
                 def run_in_thread():
-                    return asyncio.get_event_loop().run_until_complete(callable_object(auth_id=auth_id, **params))
+                    return asyncio.run(callable_object(auth_id=auth_id, **params))
                 result = await asyncio.to_thread(run_in_thread)
             else:
                 result = await callable_object(auth_id=auth_id, **params)

@@ -161,9 +161,78 @@ class TestAuth(unittest.TestCase):
         self.assertEqual(package['PlaidCloud-Pass'], password)
         self.assertEqual(package['PlaidCloud-MFA'], mfa)
 
+    def test_oauth2_auth(self):
+        obj = Auth()
+        token = 'some_token_abc123'
+        obj.oauth2(token)
+        self.assertEqual(obj._public_key, token)
+        self.assertEqual(obj._auth_method, 'oauth2')
+
+    def test_set_method_oauth2(self):
+        obj = Auth()
+        obj.set_method('oauth2')
+        self.assertEqual(obj.get_method(), 'oauth2')
+
+    def test_set_status_message(self):
+        obj = Auth()
+        obj.set_status_message('test message')
+        self.assertEqual(obj.get_status_message(), 'test message')
+
+    def test_set_status_invalid_raises(self):
+        obj = Auth()
+        with self.assertRaises(Exception):
+            obj.set_status('invalid_status')
+
+    def test_increment_attempts(self):
+        obj = Auth()
+        initial = obj.get_attempts()
+        obj._increment_attempts()
+        self.assertEqual(obj.get_attempts(), initial + 1)
+
+    def test_transform_method_direct(self):
+        obj = Auth()
+        task_id = 'tid'
+        session_id = 'sid'
+        obj.transform(task_id, session_id)
+        self.assertEqual(obj._public_key, task_id)
+        self.assertEqual(obj._private_key, session_id)
+        self.assertEqual(obj._auth_method, 'transform')
+
+    def test_set_method_invalid_raises(self):
+        obj = Auth()
+        with self.assertRaises(Exception) as ctx:
+            obj.set_method('not_a_real_method')
+        self.assertIn('Invalid', str(ctx.exception))
+
     def tearDown(self):
         "Clean up any test structure or records generated during the testing"
         pass
+
+
+class TestAuthFactories(unittest.TestCase):
+    """Test module-level helper factories."""
+
+    def test_user_auth(self):
+        from plaidcloud.rpc.remote.auth import user_auth
+        obj = user_auth('u', 'p')
+        self.assertEqual(obj._auth_method, 'user')
+        self.assertEqual(obj._public_key, 'u')
+
+    def test_agent_auth(self):
+        from plaidcloud.rpc.remote.auth import agent_auth
+        obj = agent_auth('pub', 'priv')
+        self.assertEqual(obj._auth_method, 'agent')
+
+    def test_transform_auth(self):
+        from plaidcloud.rpc.remote.auth import transform_auth
+        obj = transform_auth('task', 'session')
+        self.assertEqual(obj._auth_method, 'transform')
+
+    def test_oauth2_auth(self):
+        from plaidcloud.rpc.remote.auth import oauth2_auth
+        obj = oauth2_auth('token_value')
+        self.assertEqual(obj._auth_method, 'oauth2')
+
 
 if __name__ == '__main__':
     unittest.TestProgram()

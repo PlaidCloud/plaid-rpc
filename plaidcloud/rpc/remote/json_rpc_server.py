@@ -94,7 +94,8 @@ def get_args_from_callable(callable_object):
     arg_defaults = list(reversed(defaults))
 
     # Return a dict of the args and their default value or None
-    return {k: v for k, v in map(None, required_args, arg_defaults)}
+    from itertools import zip_longest
+    return {k: v for k, v in zip_longest(required_args, arg_defaults)}
 
 
 async def execute_json_rpc(msg, auth_id, version=1, base_path=BASE_MODULE_PATH, logger=logger, extra_params=None, stream_callback=None):

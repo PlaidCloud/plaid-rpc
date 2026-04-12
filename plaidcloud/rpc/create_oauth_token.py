@@ -30,6 +30,7 @@ def token_is_expired(token: str) -> bool:
         expires = decoded["exp"]
         if datetime.now() >= datetime.fromtimestamp(expires):
             return True
+        return False
     else:
         return False
 
@@ -157,27 +158,10 @@ def create_oauth_token(grant_type, client_id, client_secret, scopes='openid', us
 
 
 
-def main():
+def main():  # pragma: no cover
     """ A simple script to get an auth token from the command line
     """
-    # This ideally be needed anymore. If it is, it will need to be updated for keycloak.
     pass
-    """grant_type = None
-    username = None
-    password = None
-    while grant_type not in ['password', 'client_credentials']:
-        grant_type = str(input('Enter grant type to use for this token ("password" or "client_credentials"): ')).strip()
-
-    client_id = str(input('Enter PlaidCloud Client ID: ')).strip()
-    client_secret = str(input('Enter PlaidCloud Client Secret: ')).strip()
-    workspace_id = str(input('Enter the workspace ID to use with this token: ')).strip()
-
-    if grant_type == 'password':
-        username = str(input('Enter username: ')).strip()
-        password = str(input('Enter password: ')).strip()
-
-    print(('Received token from PlaidCloud: {}'.format(create_oauth_token(grant_type, client_id, client_secret, workspace_id=workspace_id, username=username, password=password))))
-    """
 
 
 if __name__ == '__main__':
