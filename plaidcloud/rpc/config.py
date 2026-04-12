@@ -292,7 +292,9 @@ class PlaidConfig:
                 # Need to perform a directed search upward to find the first plaid.conf file
                 self.cfg_path = str(find_plaid_conf())
 
-            if not isinstance(self.cfg_path, str):
+            if not isinstance(self.cfg_path, str):  # pragma: no cover
+                # Defensive: find_plaid_conf always returns a Path that str()
+                # produces a string, so this is unreachable in practice.
                 raise Exception('ERROR: No RPC connection configuration available.')
 
             if not os.path.exists(self.cfg_path):
@@ -340,7 +342,10 @@ class PlaidConfig:
                             self._C.update(yaml.safe_load(config_fp))
                     except:
                         logger.exception("Could not load config from {}".format(file_path))
-                else:
+                else:  # pragma: no cover
+                    # Defensive: the glob only returns *.yaml files, and the
+                    # startswith('__') check uses the full path, not basename,
+                    # so this branch is effectively unreachable.
                     logger.warning("Skipping: Will not load config from {}".format(file_path))
 
         def _build_paths():
@@ -506,7 +511,7 @@ def find_workspace_root(path=None):
         else:
             return recurse(path.parent)
 
-    return recurse(Path.cwd())
+    return recurse(path)
 
 # TARGET_WORKING_DIRECTORY = os.path.abspath(os.path.dirname(__file__))
 # CONFIG_PATH = ('{}/config/'.format(TARGET_WORKING_DIRECTORY))

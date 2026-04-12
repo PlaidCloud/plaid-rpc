@@ -35,7 +35,7 @@ STREAM_ENDPOINTS = {
 
 download_folder = os.path.join(tempfile.gettempdir(), "plaid/download")
 
-if not os.path.exists(download_folder):
+if not os.path.exists(download_folder):  # pragma: no cover
     os.makedirs(download_folder)
 
 

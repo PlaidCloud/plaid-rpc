@@ -9,8 +9,10 @@ from socketserver import TCPServer
 
 class AuthCodeListener(BaseHTTPRequestHandler):
 
-    def __init__(self, request, client_address, server, listen_path, state=None):
-        """Overriding default init to add listen_path and state"""
+    def __init__(self, request, client_address, server, listen_path, state=None):  # pragma: no cover
+        """Overriding default init to add listen_path and state.
+        Requires a live socket — do_GET is tested in isolation.
+        """
         self.listen_path = listen_path
         self.state = state
         self.keep_listening = True    # This will be set to false once we have a code
@@ -48,6 +50,6 @@ def get_auth_code(hostname='localhost', port=8080, listen_path='/'):
 
     httpd = TCPServer((hostname, port), AuthCodeListener)
     while httpd.RequestHandlerClass.keep_listening:
-        httpd.handle_request()
+        httpd.handle_request()  # pragma: no cover
 
     return httpd.RequestHandlerClass.code

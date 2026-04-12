@@ -1,4 +1,4 @@
-name: Lint PlaidCloud RPC
+name: Lint and Test PlaidCloud RPC
 on:
   pull_request:
     branches:
@@ -15,6 +15,13 @@ jobs:
           python-version: '3.12'
       - name: Checkout code
         uses: actions/checkout@v4
+      - name: Acquire list of changed python files
+        id: all-python-files
+        continue-on-error: true
+        uses: tj-actions/changed-files@v42
+        with:
+          files: |
+            **/*.py
       - name: Install dependencies
         run: pip install -e .[test]; pip install -q pylint==${{ secrets.PYLINT_VERSION }};
       - name: License Checker
@@ -26,26 +33,50 @@ jobs:
           liccheck-version: ${{ secrets.LICCHECK_VERSION }}
       - name: Install ReviewDog
         uses: reviewdog/action-setup@v1
-      - name: Perform Lint
+      - name: Check Lint Warnings
+        if: ${{ steps.all-python-files.outputs.any_changed == 'true' }}
         env:
           REVIEWDOG_GITHUB_API_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          pylint -s n -f text plaidcloud 2>&1 | reviewdog -efm="%f:%l:%c: %m" -name="PyLint" -reporter=github-check -level=warning
-      - name: Perform Tests
+          pylint -s n -f text -d E,R,C ${{ steps.all-python-files.outputs.all_changed_files }} 2>&1 | reviewdog -efm="%f:%l:%c: %m" -name="PyLint Warnings" -reporter=github-check -level=warning
+      - name: Check Lint Errors
+        env:
+          REVIEWDOG_GITHUB_API_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          pytest
-      - name: Test Report
-        uses: dorny/test-reporter@v1
-        if: success() || failure()    # run this step even if previous step failed
+          pylint -s n -f text -E plaidcloud 2>&1 | reviewdog -efm="%f:%l:%c: %m" -name="PyLint Errors" -reporter=github-check -filter-mode=nofilter -fail-on-error
+  test:
+    name: Run Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      checks: write
+      pull-requests: write
+    steps:
+      - name: Ensure python 3.12
+        uses: actions/setup-python@v5
         with:
-          name: Tests               # Name of the check run which will be created
-          path: pytestresult.xml    # Path to test results
-          reporter: java-junit      # Format of test results
-          token: ${{ secrets.GITHUB_TOKEN }}
-      - name: Prepare Coverage Report
-        uses: 5monkeys/cobertura-action@master
-        if: success() || failure()    # run this step even if previous step failed
+          python-version: '3.12'
+      - name: Checkout code
+        uses: actions/checkout@v4
+      - name: Install dependencies
+        run: pip install -e ".[test]"
+      - name: Run pytest with coverage
+        run: |
+          pytest plaidcloud/rpc/tests/ -v \
+            --cov=plaidcloud.rpc \
+            --cov-report=term-missing \
+            --cov-report=xml:coverage.xml \
+            --cov-fail-under=100 \
+            --junitxml=test-results.xml
+      - name: Test Results
+        if: always()
+        uses: mikepenz/action-junit-report@v5
         with:
-          path: coverage.xml
-          repo_token: ${{ secrets.GITHUB_TOKEN }}
-          minimum_coverage: 75
+          report_paths: test-results.xml
+          check_name: Test Results
+      - name: Pytest Coverage Comment
+        if: always()
+        uses: MishaKav/pytest-coverage-comment@v1.7.1
+        with:
+          pytest-xml-coverage-path: coverage.xml
+          junitxml-path: test-results.xml

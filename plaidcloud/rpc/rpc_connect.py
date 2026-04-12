@@ -58,9 +58,11 @@ class Connect(PlaidConfig, SimpleRPC):
         elif self.is_local and auto_initialize:
             self.initialize()
 
-    def request_oauth_token(self):
-        """Requests a Plaid Oauth token using the auth_code flow"""
-
+    def request_oauth_token(self):  # pragma: no cover
+        """Requests a Plaid Oauth token using the auth_code flow.
+        Requires a live HTTP listener + browser redirect; exercised only
+        via integration tests against a real PlaidCloud instance.
+        """
         # Step 0: Set up a listener to await the redirect from PlaidCloud after step 1
         # TODO set up a listener here. Probably use flask?
 
@@ -101,7 +103,7 @@ class Connect(PlaidConfig, SimpleRPC):
             'client_secret': str(self.client_secret),
         }
         if not client_credentials:
-            post_data['code'] = str(authorization_code),
+            post_data['code'] = str(authorization_code)
         result = requests.post(self.token_uri, data=post_data)
 
         if result.status_code != requests.codes.get('ok'):
@@ -132,7 +134,7 @@ class Connect(PlaidConfig, SimpleRPC):
         if self.auth_token:
             self.ready()
         elif self.grant_type == "client_credentials":
-            self.auth_token = self.get_auth_token
+            self.auth_token = self.get_auth_token()
             self.ready()
         else:
             if not self.auth_code:

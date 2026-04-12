@@ -173,5 +173,5 @@ def any_tableset(fileobj, mimetype=None, extension='', auto_detect=True, **kw):
 class AnyTableSet:
     '''Deprecated - use any_tableset instead.'''
     @staticmethod
-    def from_fileobj(fileobj, mimetype=None, extension=None):
-        return any_tableset(fileobj, mimetype=mimetype, extension=extension)
+    def from_fileobj(fileobj, mimetype=None, extension=''):
+        return any_tableset(fileobj, mimetype=mimetype, extension=extension or '')

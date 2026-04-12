@@ -7,7 +7,7 @@ import sqlalchemy
 # Check SQLAlchemy version
 if sqlalchemy.__version__.startswith('2.'):
     from sqlalchemy.types import DOUBLE
-else:
+else:  # pragma: no cover
     from databend_sqlalchemy.types import DOUBLE
 from plaidcloud.rpc.database import (
     PlaidUnicode, PlaidNumeric, PlaidTimestamp, PlaidJSON, GUIDHyphens, PlaidTinyInt, PlaidGeography, PlaidGeometry

@@ -238,7 +238,9 @@ class BetterSniffer(csv.Sniffer):
                 delims[key] = delims.get(key, 0) + 1
             try:
                 n = groupindex['space'] - 1
-            except KeyError:
+            except KeyError:  # pragma: no cover
+                # All regexes with a delim group also have a space group;
+                # this branch is defensive and never exercised.
                 continue
             if m[n]:
                 spaces += 1
@@ -248,7 +250,9 @@ class BetterSniffer(csv.Sniffer):
         if delims:
             delim = max(delims, key=delims.get)
             skipinitialspace = delims[delim] == spaces
-            if delim == '\n': # most likely a file with a single column
+            if delim == '\n':  # pragma: no cover
+                # Dead: all regex patterns exclude '\n' from the delim group,
+                # so delim can never equal '\n' here.
                 delim = ''
         else:
             # there is *no* delimiter, it's a single column of quoted data

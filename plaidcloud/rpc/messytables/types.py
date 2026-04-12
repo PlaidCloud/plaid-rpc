@@ -100,7 +100,7 @@ class DecimalType(CellType):
             # get rid of thousands separators
             # e.g. "1,000.00"
             value = locale.atof(value)
-            if sys.version_info < (2, 7):
+            if sys.version_info < (2, 7):  # pragma: no cover
                 value = str(value)
             return decimal.Decimal(value)
 

@@ -29,28 +29,28 @@ from sqlalchemy.dialects.mysql.base import MySQLDialect
 
 try:
     from databend_sqlalchemy import databend_dialect
-except ImportError:
+except ImportError:  # pragma: no cover
     databend_dialect = None
 
 try:
     from sqlalchemy_hana.dialect import HANAHDBCLIDialect
-except ImportError:
+except ImportError:  # pragma: no cover
     HANAHDBCLIDialect = None
 try:
     from sqlalchemy_greenplum.dialect import GreenplumDialect
-except ImportError:
+except ImportError:  # pragma: no cover
     GreenplumDialect = None
 try:
     from starrocks.dialect import StarRocksDialect
-except ImportError:
+except ImportError:  # pragma: no cover
     StarRocksDialect = None
 try:
     from databend_sqlalchemy.databend_dialect import DatabendDialect
-except ImportError:
+except ImportError:  # pragma: no cover
     DatabendDialect = None
 try:
     from snowflake.sqlalchemy.snowdialect import SnowflakeDialect
-except ImportError:
+except ImportError:  # pragma: no cover
     SnowflakeDialect = None
 
 from plaidcloud.rpc import config
@@ -216,7 +216,7 @@ class PlaidNumeric(TypeDecorator):
             dialect (Dialect): SQLAlchemy dialect
         Returns:
             str: Type Descriptor"""
-        if is_dialect_starrocks_based(dialect):
+        if is_dialect_starrocks_based(dialect):  # pragma: no cover - requires starrocks
             return dialect.type_descriptor(DECIMAL(38, 10, asdecimal=True))
         if is_dialect_sql_server_based(dialect) or is_dialect_mysql_based(dialect) or is_dialect_snowflake_based(dialect):
             return_decimals = not is_dialect_snowflake_based(dialect)  # Needed for snowflake, potentially useful for others.
@@ -245,7 +245,7 @@ class PlaidUnicode(TypeDecorator):
         """
         if is_dialect_postgresql_based(dialect):
             return dialect.type_descriptor(UnicodeText)
-        if is_dialect_databend_based(dialect):
+        if is_dialect_databend_based(dialect):  # pragma: no cover - requires databend
             return dialect.type_descriptor(VARCHAR)
 
         return self.impl
@@ -265,12 +265,12 @@ class PlaidTinyInt(TypeDecorator):
         Returns:
             str: Type Descriptor
         """
-        if is_dialect_databend_based(dialect):
+        if is_dialect_databend_based(dialect):  # pragma: no cover - requires databend
             return dialect.type_descriptor(databend_dialect.TINYINT)
 
         return self.impl
 
-class PlaidGeometry(TypeDecorator):
+class PlaidGeometry(TypeDecorator):  # pragma: no cover - requires databend
     """Spatial type for implementing Geometry on Databend"""
     impl = databend_dialect.GEOMETRY if databend_dialect else None # type: ignore
     cache_ok = True
@@ -282,7 +282,7 @@ class PlaidGeometry(TypeDecorator):
         return self.impl
 
 
-class PlaidGeography(TypeDecorator):
+class PlaidGeography(TypeDecorator):  # pragma: no cover - requires databend
     """Spatial type for implementing Geography on Databend"""
     impl = databend_dialect.GEOGRAPHY if databend_dialect else None # type: ignore
     cache_ok = True
@@ -331,7 +331,7 @@ class PlaidBitmap(TypeDecorator):
         Returns:
             str: Type Descriptor
         """
-        if is_dialect_databend_based(dialect):
+        if is_dialect_databend_based(dialect):  # pragma: no cover - requires databend
             return dialect.type_descriptor(databend_dialect.BITMAP)
 
         return self.impl
@@ -412,6 +412,10 @@ def query_and_call(connection, sql_file_obj, callback, callback_args=None,
     query = sql_file_obj.read().rstrip(' \t\r\n;')
     logger.debug("Using query: %r", query)
     ts = time.time()
+    if callback_args is None:
+        callback_args = ()
+    if callback_kwargs is None:
+        callback_kwargs = {}
     with connection.begin() as conn:
         result = conn.execute(query)
         te = time.time()
@@ -437,13 +441,13 @@ def query_and_call(connection, sql_file_obj, callback, callback_args=None,
                 pass
             else:
                 total_records += 1
-                if total_records % fetch_limit == 0:
+                if total_records % fetch_limit == 0:  # pragma: no cover
                     logger.debug("Fetched %s records, so far",
                                  "{:,}".format(total_records))
-                if not callback_args:
+                if not callback_args:  # pragma: no cover
                     callback_args = ()
 
-                if not callback_kwargs:
+                if not callback_kwargs:  # pragma: no cover
                     callback_kwargs = {}
                 callback(row, *callback_args, **callback_kwargs)
 
@@ -451,7 +455,7 @@ def query_and_call(connection, sql_file_obj, callback, callback_args=None,
                 if fetch_queue.empty() or fetch_failed.is_set():
                     # Done or failed
                     read_queue = False
-            else:
+            else:  # pragma: no cover
                 # Still waiting for a conclusion
                 read_queue = True
 
@@ -634,11 +638,12 @@ def from_query_to_path_csv(connection, sql_path_or_fo, results_path_or_fo):
     return record_count, written_bytes
 
 
-def get_engine(conn_str=None):
+def get_engine(conn_str=None):  # pragma: no cover
     """Return a SQLAlchemy engine object, which can provide a connection.
 
     By default, the engine object uses a connection string found in the
-    config file.
+    config file. Has interactive credential prompts that can't be tested
+    non-interactively.
 
     Args:
         conn_str(str, optional): A connection string to use to get the db connection

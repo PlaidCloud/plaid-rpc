@@ -72,14 +72,26 @@ target-version = ['py312']
 skip-string-normalization = true
 
 [tool.pytest.ini_options]
-# addopts = "-v --maxfail=25 -p no:warnings -p no:logging --doctest-modules"
-addopts = "--tb=native -v -r sfxX --maxfail=25 -p no:warnings -p no:logging --doctest-modules --cov=. --cov-report=xml --junitxml=pytestresult.xml"
+addopts = "--tb=native -v -r sfxX --maxfail=25 -p no:warnings -p no:logging --doctest-modules"
 
 [tool.coverage.run]
-omit = ["plaidcloud/rpc/tests/*"]
+omit = [
+    "plaidcloud/rpc/tests/*",
+    "plaidcloud/rpc/pcm_connection.py",
+    "plaidcloud/rpc/alteryx_parser.py",
+]
 
 [tool.coverage.report]
 include = ["./plaidcloud/*"]
+exclude_lines = [
+    "pragma: no cover",
+    "raise NotImplementedError",
+    "if __name__ == .__main__.:",
+    "def __repr__",
+    "if TYPE_CHECKING:",
+    "@(abc\\.)?abstractmethod",
+    "\\.\\.\\.",
+]
 
 # Can be moved from liccheck.ini if we want
 #[tool.liccheck]

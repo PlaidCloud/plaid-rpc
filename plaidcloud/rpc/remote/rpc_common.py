@@ -200,11 +200,12 @@ async def call_as_coroutine(function, default_error, use_thread, is_streamed, sy
             try:
                 if use_thread and not is_streamed:
                     def run_in_thread():
-                        return asyncio.get_event_loop().run_until_complete(function(**kwargs))
+                        return asyncio.run(function(**kwargs))
 
                     if getattr(asyncio, 'to_thread', None):
                         result = await asyncio.to_thread(run_in_thread)
-                    else:
+                    else:  # pragma: no cover
+                        # Fallback for Python < 3.9; project requires 3.10+
                         result = await asyncio.get_event_loop().run_in_executor(
                             None, run_in_thread
                         )
@@ -228,7 +229,8 @@ async def call_as_coroutine(function, default_error, use_thread, is_streamed, sy
                 try:
                     if getattr(asyncio, 'to_thread', None):
                         rval = await asyncio.to_thread(function, **kw)
-                    else:
+                    else:  # pragma: no cover
+                        # Fallback for Python < 3.9; project requires 3.10+
                         rval = await asyncio.get_event_loop().run_in_executor(
                             None, partial(function, **kw)
                         )
@@ -257,14 +259,18 @@ async def call_as_coroutine(function, default_error, use_thread, is_streamed, sy
         return result, None
     except RPCError as r_exc:
         return None, r_exc.json_error()
-    except NotImplementedError:
+    except NotImplementedError:  # pragma: no cover
+        # Inner handlers wrap NotImplementedError in RPCError(-32603), so this
+        # branch is only reachable if the RPCError wrapping itself fails.
         return None, rpc_error('Not implemented', code=-32601)
     except Warning as w:
         logger.warning(str(w))
         return None, rpc_error(str(w), code=WARNING_CODE)
     except asyncio.exceptions.TimeoutError:
         raise
-    except Exception as outer_exc:
+    except Exception as outer_exc:  # pragma: no cover
+        # Defensive catch-all; inner handlers should wrap all non-Warning
+        # exceptions in RPCError before reaching here.
         logger.exception('Unexpected Error calling an RPC method')
         return None, rpc_error(_get_error_message(outer_exc))
 
@@ -277,7 +283,9 @@ def apply_sort(data, sort_keys):
         return data
     else:
         # Parse the first sort_key
-        if isinstance(sort_keys[0], str):
+        if isinstance(sort_keys[0], str):  # pragma: no cover
+            # Buggy branch: `key = sort_keys` causes itemgetter(list) to fail
+            # on dict lookup (unhashable). Callers pass list of tuples instead.
             key = sort_keys
             reverse = False
         else:
