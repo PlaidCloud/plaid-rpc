@@ -119,12 +119,22 @@ class TestZIPTableSet:
         assert len(ts.tables) >= 1
 
     def test_zip_no_recognized_tables_raises(self):
+        # Build a ZIP where any_tableset will fail on every entry.
+        # auto_detect=False is not honored by ZIPTableSet signature, so mock
+        # any_tableset directly to ensure the test is deterministic across
+        # environments (python-magic may classify 'content' as text/plain
+        # and return a CSV parser on some CI runners).
         buf = io.BytesIO()
         with zipfile.ZipFile(buf, 'w') as z:
             z.writestr('nothing.unknown', 'content')
         buf.seek(0)
-        with pytest.raises(Exception):
-            ZIPTableSet(buf)
+
+        from plaidcloud.rpc import messytables as mt_pkg
+        with mock.patch.object(
+            mt_pkg.any, 'any_tableset', side_effect=ValueError('cannot parse'),
+        ):
+            with pytest.raises(Exception):
+                ZIPTableSet(buf)
 
 
 class TestBetterSniffer:
