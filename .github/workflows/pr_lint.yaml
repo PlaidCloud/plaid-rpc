@@ -3,27 +3,29 @@ on:
   pull_request:
     branches:
       - master
+env:
+  PYTHON_VERSION: '3.12'
 jobs:
   reviewdog:
     name: Lint PlaidCloud RPC w ReviewDog
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Ensure python 3.12
-        uses: actions/setup-python@v5
+      - name: Ensure python ${{ env.PYTHON_VERSION }}
+        uses: actions/setup-python@v6
         with:
-          python-version: '3.12'
+          python-version: ${{ env.PYTHON_VERSION }}
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
       - name: Acquire list of changed python files
         id: all-python-files
         continue-on-error: true
-        uses: tj-actions/changed-files@v42
+        uses: tj-actions/changed-files@v47
         with:
           files: |
             **/*.py
       - name: Install dependencies
-        run: pip install -e .[test]; pip install -q pylint==${{ secrets.PYLINT_VERSION }};
+        run: pip install -e .; pip install -q pylint==${{ secrets.PYLINT_VERSION }};
       - name: License Checker
         uses: andersy005/gh-action-py-liccheck@main
         with:
@@ -52,12 +54,12 @@ jobs:
       checks: write
       pull-requests: write
     steps:
-      - name: Ensure python 3.12
-        uses: actions/setup-python@v5
+      - name: Ensure python ${{ env.PYTHON_VERSION }}
+        uses: actions/setup-python@v6
         with:
-          python-version: '3.12'
+          python-version: ${{ env.PYTHON_VERSION }}
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
       - name: Install dependencies
         run: pip install -e ".[test]"
       - name: Run pytest with coverage
