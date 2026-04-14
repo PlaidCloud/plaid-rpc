@@ -5,6 +5,7 @@ on:
       - master
 env:
   PYTHON_VERSION: '3.12'
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 jobs:
   reviewdog:
     name: Lint PlaidCloud RPC w ReviewDog
@@ -25,7 +26,7 @@ jobs:
           files: |
             **/*.py
       - name: Install dependencies
-        run: pip install -e .; pip install -q pylint==${{ secrets.PYLINT_VERSION }};
+        run: pip install -e .[full]; pip install -q pylint==${{ secrets.PYLINT_VERSION }};
       - name: License Checker
         uses: andersy005/gh-action-py-liccheck@main
         with:
