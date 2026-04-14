@@ -1,10 +1,9 @@
 [build-system]
-requires = ["setuptools"]
+requires = ["setuptools", "setuptools-scm"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "plaidcloud-rpc"
-version = "1.6.11"
 authors = [
     {name = "Michael Rea", email = "mike@plaidcloud.com"},
     {name = "Paul Morel", email = "paul@plaidcloud.com"},
@@ -28,11 +27,13 @@ classifiers = [
     "Programming Language :: Python :: 3.13",
     "Programming Language :: Python :: 3.14",
 ]
-dynamic = ["readme", "dependencies"]
+dynamic = ["version", "readme", "dependencies"]
 
 [tool.setuptools.dynamic]
 readme = {file = ["README.md"], content-type = "text/markdown"}
 dependencies = {file = ["requirements.txt"]}
+
+[tool.setuptools_scm]
 
 [project.optional-dependencies]
 test = [
