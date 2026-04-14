@@ -26,32 +26,10 @@ from sqlalchemy.dialects.postgresql.base import PGDialect, UUID
 from sqlalchemy.dialects.postgresql.json import JSONB
 from sqlalchemy.dialects.mssql.base import MSDialect, UNIQUEIDENTIFIER
 from sqlalchemy.dialects.mysql.base import MySQLDialect
-
 try:
     from databend_sqlalchemy import databend_dialect
 except ImportError:  # pragma: no cover
     databend_dialect = None
-
-try:
-    from sqlalchemy_hana.dialect import HANAHDBCLIDialect
-except ImportError:  # pragma: no cover
-    HANAHDBCLIDialect = None
-try:
-    from sqlalchemy_greenplum.dialect import GreenplumDialect
-except ImportError:  # pragma: no cover
-    GreenplumDialect = None
-try:
-    from starrocks.dialect import StarRocksDialect
-except ImportError:  # pragma: no cover
-    StarRocksDialect = None
-try:
-    from databend_sqlalchemy.databend_dialect import DatabendDialect
-except ImportError:  # pragma: no cover
-    DatabendDialect = None
-try:
-    from snowflake.sqlalchemy.snowdialect import SnowflakeDialect
-except ImportError:  # pragma: no cover
-    SnowflakeDialect = None
 
 from plaidcloud.rpc import config
 
@@ -755,7 +733,11 @@ def is_dialect_greenplum_based(dialect):
         >>> is_dialect_greenplum_based(GreenplumDialect())
         True
     """
-    return GreenplumDialect is not None and isinstance(dialect, GreenplumDialect)
+    try:
+        from sqlalchemy_greenplum.dialect import GreenplumDialect
+    except ImportError:  # pragma: no cover
+        return False
+    return isinstance(dialect, GreenplumDialect)
 
 
 def is_dialect_hana_based(dialect):
@@ -775,7 +757,11 @@ def is_dialect_hana_based(dialect):
         >>> is_dialect_hana_based(GreenplumDialect())
         False
     """
-    return HANAHDBCLIDialect is not None and isinstance(dialect, HANAHDBCLIDialect)
+    try:
+        from sqlalchemy_hana.dialect import HANAHDBCLIDialect
+    except ImportError:  # pragma: no cover
+        return False
+    return isinstance(dialect, HANAHDBCLIDialect)
 
 
 def is_dialect_mysql_based(dialect):
@@ -795,6 +781,7 @@ def is_dialect_mysql_based(dialect):
         >>> is_dialect_mysql_based(GreenplumDialect())
         False
     """
+
     return isinstance(dialect, MySQLDialect)
 
 
@@ -815,7 +802,11 @@ def is_dialect_starrocks_based(dialect):
         >>> is_dialect_starrocks_based(GreenplumDialect())
         False
     """
-    return StarRocksDialect is not None and isinstance(dialect, StarRocksDialect)
+    try:
+        from starrocks.dialect import StarRocksDialect
+    except ImportError:  # pragma: no cover
+        return False
+    return isinstance(dialect, StarRocksDialect)
 
 
 def is_dialect_snowflake_based(dialect):
@@ -835,7 +826,11 @@ def is_dialect_snowflake_based(dialect):
         >>> is_dialect_snowflake_based(GreenplumDialect())
         False
     """
-    return SnowflakeDialect is not None and isinstance(dialect, SnowflakeDialect)
+    try:
+        from snowflake.sqlalchemy.snowdialect import SnowflakeDialect
+    except ImportError:  # pragma: no cover
+        return False
+    return isinstance(dialect, SnowflakeDialect)
 
 
 def is_dialect_databend_based(dialect):
@@ -855,7 +850,11 @@ def is_dialect_databend_based(dialect):
         >>> is_dialect_databend_based(GreenplumDialect())
         False
     """
-    return DatabendDialect is not None and isinstance(dialect, DatabendDialect)
+    try:
+        from databend_sqlalchemy.databend_dialect import DatabendDialect
+    except ImportError:  # pragma: no cover
+        return False
+    return isinstance(dialect, DatabendDialect)
 
 
 def get_compiled_table_name(engine, schema, table_name):
