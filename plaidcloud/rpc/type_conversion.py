@@ -26,6 +26,7 @@ __maintainer__ = 'Paul Morel'
 __email__ = 'paul.morel@tartansolutions.com'
 
 _ANALYZE_TYPE = regex_map({
+        r'^any$': 'text',  # qsv stats emits "Any" when a column has no homogeneous type — treat as free text
         r'^array$': 'text',
         r'^bool$': 'boolean',
         r'^boolean$': 'boolean',
