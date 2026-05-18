@@ -1,7 +1,9 @@
 # coding=utf-8
 
+import contextlib
 import os
 import tempfile
+import threading
 
 import urllib3
 import urllib3.exceptions
@@ -39,6 +41,76 @@ if not os.path.exists(download_folder):  # pragma: no cover
     os.makedirs(download_folder)
 
 
+_rpc_context = threading.local()
+_shared_session = None
+
+# urllib3 keeps a fixed-size connection pool per host; once it's full, extra
+# concurrent requests open a connection that urllib3 then *discards* on return
+# (logging "Connection pool is full"), forcing a fresh TCP+TLS handshake — the
+# exact cost the shared session exists to avoid. SimpleRPC is called from worker
+# pools that routinely exceed 10 in-flight requests, so the default needs to be
+# high enough to cover them. Override via PLAIDCLOUD_RPC_POOL_MAXSIZE.
+DEFAULT_POOL_MAXSIZE = 32
+
+
+def _pool_maxsize():
+    try:
+        return max(1, int(os.environ.get('PLAIDCLOUD_RPC_POOL_MAXSIZE', DEFAULT_POOL_MAXSIZE)))
+    except (TypeError, ValueError):
+        return DEFAULT_POOL_MAXSIZE
+
+
+def _get_shared_session():
+    """Lazily build a module-level requests.Session for standard (non-streaming, non-fire-and-forget)
+    RPC calls. Reusing one session amortises TCP+TLS handshakes across calls.
+
+    The mounted adapter holds a single RPCRetry that reads check_allow_transmit from the
+    thread-local _rpc_context, so per-call cancellation still works on the shared session.
+
+    Pool size is controlled by PLAIDCLOUD_RPC_POOL_MAXSIZE (default 32). If concurrent
+    in-flight RPCs exceed pool_maxsize, urllib3 logs "Connection pool is full" and
+    discards the surplus connection on return, which defeats the shared-session win.
+    """
+    global _shared_session
+    if _shared_session is None:
+        pool_size = _pool_maxsize()
+        session = requests.Session()
+        adapter = HTTPAdapter(
+            max_retries=RPCRetry(),
+            pool_connections=pool_size,
+            pool_maxsize=pool_size,
+        )
+        session.mount('http://', adapter)
+        session.mount('https://', adapter)
+        _shared_session = session
+    return _shared_session
+
+
+@contextlib.contextmanager
+def _get_session(*, shared=False, futures=False, retry_obj=0):
+    """Yield a requests Session configured for an RPC call.
+
+    - shared=True: yield the lazily-built module-level Session. `futures` and `retry_obj`
+      are ignored; the shared session has its own RPCRetry that honours per-call
+      cancellation via the thread-local. NOT closed on exit — it is reused across calls.
+    - futures=True: yield a fresh FuturesSession with `retry_obj` on its adapter.
+    - default: yield a fresh requests.Session with `retry_obj` on its adapter.
+
+    Fresh sessions are closed on context exit.
+    """
+    if shared:
+        yield _get_shared_session()
+        return
+    session = FuturesSession() if futures else requests.Session()
+    try:
+        adapter = HTTPAdapter(max_retries=retry_obj)
+        session.mount('http://', adapter)
+        session.mount('https://', adapter)
+        yield session
+    finally:
+        session.close()
+
+
 def http_json_rpc(token=None, uri=None, verify_ssl=None, json_data=None, proxies=None,
                   fire_and_forget=False, check_allow_transmit=None, retry=True, headers=None):
     """
@@ -72,21 +144,8 @@ def http_json_rpc(token=None, uri=None, verify_ssl=None, json_data=None, proxies
 
     payload = json.dumps(assoc(json_data, 'id', 0), default=unsupported_object_json_encoder, option=json.OPT_NAIVE_UTC | json.OPT_NON_STR_KEYS)
 
-    def get_session():
-        if fire_and_forget:
-            return FuturesSession()
-        return requests.sessions.Session()
-
-    with get_session() as session:
-        if streamable() or not retry:
-            retry = 0
-        else:
-            retry = RPCRetry(check_allow_transmit=check_allow_transmit)
-        adapter = HTTPAdapter(max_retries=retry)
-        session.mount('http://', adapter)
-        session.mount('https://', adapter)
-
-        if streamable():
+    if streamable():
+        with _get_session(retry_obj=0) as session:
             handle, file_name = tempfile.mkstemp(dir=download_folder, prefix="download_", suffix=".tmp")
             os.close(handle)  # Can't control the access mode, so close this one and open another.
             with open(file_name, 'wb') as tmp_file:
@@ -102,7 +161,9 @@ def http_json_rpc(token=None, uri=None, verify_ssl=None, json_data=None, proxies
                     for chunk in response.iter_content(chunk_size=None):
                         tmp_file.write(chunk)
             return file_name
-        elif fire_and_forget:
+    elif fire_and_forget:
+        retry_obj = RPCRetry(check_allow_transmit=check_allow_transmit) if retry else 0
+        with _get_session(futures=True, retry_obj=retry_obj) as session:
             r_future = session.post(uri, headers=headers, data=payload, verify=verify_ssl, proxies=proxies,
                                     allow_redirects=False)
 
@@ -116,16 +177,30 @@ def http_json_rpc(token=None, uri=None, verify_ssl=None, json_data=None, proxies
                     raise
 
             r_future.add_done_callback(on_request_complete)
-        else:
+    elif not retry:
+        # Caller wants no retries. Fresh session keeps the shared session's retry config from leaking in.
+        with _get_session(retry_obj=0) as session:
             try:
-                response = session.post(uri, headers=headers, data=payload, verify=verify_ssl, proxies=proxies,
-                                        allow_redirects=False)
+                response = session.post(uri, headers=headers, data=payload, verify=verify_ssl,
+                                        proxies=proxies, allow_redirects=False)
                 response.raise_for_status()
-                result = response.json()
-                return result
-            except Exception as e:
+                return response.json()
+            except Exception:
                 print(f'Exception for method {json_data.get("method")}')
                 raise
+    else:
+        with _get_session(shared=True) as session:
+            _rpc_context.check_allow_transmit = check_allow_transmit
+            try:
+                response = session.post(uri, headers=headers, data=payload, verify=verify_ssl,
+                                        proxies=proxies, allow_redirects=False)
+                response.raise_for_status()
+                return response.json()
+            except Exception:
+                print(f'Exception for method {json_data.get("method")}')
+                raise
+            finally:
+                _rpc_context.check_allow_transmit = None
 
 
 class RPCRetry(Retry):
@@ -151,8 +226,14 @@ class RPCRetry(Retry):
 
     @property
     def allow_transmit(self):
+        # Instance-level callback (passed at construction) takes precedence; otherwise fall
+        # through to the per-call callback set on the thread-local by http_json_rpc, so a
+        # shared RPCRetry on the module-level session can still honour cancellation.
         if self.__check_allow_transmit:
             return self.__check_allow_transmit()
+        check = getattr(_rpc_context, 'check_allow_transmit', None)
+        if check:
+            return check()
         return True
 
     def increment(self, *args, **kwargs):
