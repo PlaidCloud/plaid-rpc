@@ -18,35 +18,29 @@ jobs:
           python-version: ${{ env.PYTHON_VERSION }}
       - name: Checkout code
         uses: actions/checkout@v6
-      - name: Acquire list of changed python files
-        id: all-python-files
-        continue-on-error: true
-        uses: tj-actions/changed-files@v47
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
         with:
-          files: |
-            **/*.py
+          # Install a specific version of uv.
+          version: "0.11.10"
       - name: Install dependencies
-        run: pip install -e .[full]; pip install -q pylint==${{ secrets.PYLINT_VERSION }};
+        run: |
+          uv pip install --system -e .[full]
+          uv pip install --system -q ruff
       - name: License Checker
         uses: andersy005/gh-action-py-liccheck@main
         with:
           strategy-ini-file: ./liccheck.ini
           level: cautious
           requirements-txt-file: ./requirements.txt
-          liccheck-version: ${{ secrets.LICCHECK_VERSION }}
+          liccheck-version: ${{ vars.LICCHECK_VERSION }}
       - name: Install ReviewDog
         uses: reviewdog/action-setup@v1
-      - name: Check Lint Warnings
-        if: ${{ steps.all-python-files.outputs.any_changed == 'true' }}
+      - name: Perform Ruff Lint
         env:
           REVIEWDOG_GITHUB_API_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          pylint -s n -f text -d E,R,C ${{ steps.all-python-files.outputs.all_changed_files }} 2>&1 | reviewdog -efm="%f:%l:%c: %m" -name="PyLint Warnings" -reporter=github-check -level=warning
-      - name: Check Lint Errors
-        env:
-          REVIEWDOG_GITHUB_API_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          pylint -s n -f text -E plaidcloud 2>&1 | reviewdog -efm="%f:%l:%c: %m" -name="PyLint Errors" -reporter=github-check -filter-mode=nofilter -fail-on-error
+          ruff check plaidcloud --output-format=concise --exit-zero 2>&1 | reviewdog -efm="%f:%l:%c: %m" -name="Ruff" -reporter=github-check -level=warning -fail-level=error
   test:
     name: Run Tests
     runs-on: ubuntu-latest
