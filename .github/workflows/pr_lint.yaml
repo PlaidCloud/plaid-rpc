@@ -67,7 +67,7 @@ jobs:
             --junitxml=test-results.xml
       - name: Test Results
         if: always()
-        uses: mikepenz/action-junit-report@v5
+        uses: mikepenz/action-junit-report@v6
         with:
           report_paths: test-results.xml
           check_name: Test Results
