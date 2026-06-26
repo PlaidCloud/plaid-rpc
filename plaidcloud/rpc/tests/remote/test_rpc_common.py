@@ -274,6 +274,18 @@ class TestCallAsCoroutine:
         assert result is None
         assert err['message'] == 'generic error'
 
+    def test_unexpected_error_message_is_exception_not_traceback_header(self):
+        # With no default_error, the surfaced message must be the exception type +
+        # text, never the "Traceback (most recent call last):" header (sc-22705).
+        def fn():
+            raise RuntimeError('something broke')
+
+        logger = logging.getLogger('test')
+        result, err = self._run(fn, None, False, False, False, logger)
+        assert result is None
+        assert err['message'] == 'Unexpected error: RuntimeError: something broke'
+        assert 'Traceback (most recent call last)' not in err['message']
+
     def test_async_not_implemented_wrapped(self):
         # Inner try/except wraps all exceptions to -32603 for async fns
         async def fn():

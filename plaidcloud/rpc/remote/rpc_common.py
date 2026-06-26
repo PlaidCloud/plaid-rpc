@@ -192,8 +192,10 @@ def rpc_method(required_scope=None, default_error=None, is_streamed=False, use_t
 
 async def call_as_coroutine(function, default_error, use_thread, is_streamed, system_user, logger, **kwargs):
     def _get_error_message(exc: Exception):
-        # Hide most of the traceback, but provide useful diagnostic info
-        user_hint = traceback.format_exception(exc, limit=-1)[0]
+        # Show the exception type and message but not the stack frames — enough to
+        # diagnose without leaking the traceback to the user. (format_exception(..)[0]
+        # is the "Traceback (most recent call last):" header, not the message.)
+        user_hint = ''.join(traceback.format_exception_only(exc)).strip()
         return f'{f"Unexpected error: {user_hint}" if not default_error else default_error}'
     try:
         if asyncio.iscoroutinefunction(function):
