@@ -286,6 +286,18 @@ class TestCallAsCoroutine:
         assert err['message'] == 'Unexpected error: RuntimeError: something broke'
         assert 'Traceback (most recent call last)' not in err['message']
 
+    def test_async_unexpected_error_message_is_exception_not_traceback_header(self):
+        # Same guarantee via the async coroutine branch, which also calls
+        # _get_error_message (sc-22705).
+        async def fn():
+            raise RuntimeError('async broke')
+
+        logger = logging.getLogger('test')
+        result, err = self._run(fn, None, False, False, False, logger)
+        assert result is None
+        assert err['message'] == 'Unexpected error: RuntimeError: async broke'
+        assert 'Traceback (most recent call last)' not in err['message']
+
     def test_async_not_implemented_wrapped(self):
         # Inner try/except wraps all exceptions to -32603 for async fns
         async def fn():
