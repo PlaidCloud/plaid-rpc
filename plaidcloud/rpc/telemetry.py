@@ -64,7 +64,13 @@ def _collector_reachable(endpoint):
 def tracing_enabled():
     """Whether tracing should run: on by default (``PLAID_TRACING_ENABLED`` defaults true;
     set it to ``false`` to force off) **and** the OTLP collector is resolvable. The
-    reachability probe runs once and is cached, so this is cheap on the hot path."""
+    reachability probe runs once and is cached, so this is cheap on the hot path.
+
+    The result — including a negative — is cached for the process lifetime; a transient
+    DNS failure at startup would latch tracing off until a restart. That is an accepted
+    tradeoff: init_tracing (the first caller) runs at startup after DB/redis init, by
+    which point cluster DNS is up, and pods restart routinely. Caching is required because
+    the alternative — re-probing DNS on every hot-path call — is not viable."""
     global _tracing_on
     if _tracing_on is None:
         flag = os.environ.get("PLAID_TRACING_ENABLED", "true").lower() == "true"

@@ -49,11 +49,18 @@ def test_org_id_non_tenant_is_admins(monkeypatch):
     assert telemetry.telemetry_org_id() == "admins"
 
 
-def test_collector_reachable(monkeypatch):
-    monkeypatch.setattr("socket.getaddrinfo", lambda *a, **k: [("x",)])
-    assert telemetry._collector_reachable("tempo-distributor.cluster-components.svc:4317") is True
-    monkeypatch.setattr("socket.getaddrinfo", mock.Mock(side_effect=OSError))
-    assert telemetry._collector_reachable("nope:4317") is False
+def test_collector_reachable_parses_host_and_resolves():
+    gai = mock.Mock(return_value=[("x",)])
+    with mock.patch("socket.getaddrinfo", gai):
+        assert telemetry._collector_reachable("tempo-distributor.cluster-components.svc:4317") is True
+        assert gai.call_args[0][0] == "tempo-distributor.cluster-components.svc"   # port stripped
+        assert telemetry._collector_reachable("http://tempo-distributor.cluster-components.svc:4318") is True
+        assert gai.call_args[0][0] == "tempo-distributor.cluster-components.svc"   # scheme + port stripped
+
+
+def test_collector_unreachable_on_resolve_failure():
+    with mock.patch("socket.getaddrinfo", mock.Mock(side_effect=OSError)):
+        assert telemetry._collector_reachable("nope:4317") is False
 
 
 def test_tracing_on_by_default_when_collector_reachable(monkeypatch):
