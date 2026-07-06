@@ -52,7 +52,9 @@ test = [
     "sqlalchemy-greenplum",
     "sqlalchemy-hana",
     "starrocks",
-    "snowflake-sqlalchemy"
+    "snowflake-sqlalchemy",
+    "opentelemetry-sdk",
+    "opentelemetry-exporter-otlp-proto-grpc"
 ]
 full = [
     "chardet>=2.3.0",
