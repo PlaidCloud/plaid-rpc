@@ -1,5 +1,6 @@
 bleach
 comtypes;platform_system=="Windows"
+opentelemetry-api
 packaging
 PyJWT
 PyYAML

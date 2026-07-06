@@ -52,7 +52,9 @@ test = [
     "sqlalchemy-greenplum",
     "sqlalchemy-hana",
     "starrocks",
-    "snowflake-sqlalchemy"
+    "snowflake-sqlalchemy",
+    "opentelemetry-sdk",
+    "opentelemetry-exporter-otlp-proto-grpc"
 ]
 full = [
     "chardet>=2.3.0",
@@ -61,6 +63,12 @@ full = [
     "pyarrow",
     "python-dateutil>=1.5.0",
     "python-magic>=0.4.12",
+]
+# Services that call init_tracing() install this extra; the OTLP/gRPC exporter pulls in
+# grpcio, kept out of the base dependency every plaidcloud.rpc consumer gets.
+tracing = [
+    "opentelemetry-sdk",
+    "opentelemetry-exporter-otlp-proto-grpc",
 ]
 
 [project.urls]
