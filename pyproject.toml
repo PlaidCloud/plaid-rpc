@@ -62,6 +62,12 @@ full = [
     "python-dateutil>=1.5.0",
     "python-magic>=0.4.12",
 ]
+# Services that call init_tracing() install this extra; the OTLP/gRPC exporter pulls in
+# grpcio, kept out of the base dependency every plaidcloud.rpc consumer gets.
+tracing = [
+    "opentelemetry-sdk",
+    "opentelemetry-exporter-otlp-proto-grpc",
+]
 
 [project.urls]
 Homepage = "https://plaidcloud.com"

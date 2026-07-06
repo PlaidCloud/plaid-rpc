@@ -20,6 +20,7 @@ from toolz.dicttoolz import assoc
 from plaidcloud.rpc.orjson import unsupported_object_json_encoder
 from plaidcloud.rpc.remote.rpc_tools import PlainRPCCommon
 from plaidcloud.rpc.remote.rpc_common import RPCError, WARNING_CODE
+from plaidcloud.rpc.telemetry import inject_trace_context
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
@@ -141,6 +142,11 @@ def http_json_rpc(token=None, uri=None, verify_ssl=None, json_data=None, proxies
     headers["Content-Type"] = "application/json"
     if token:
         headers["Authorization"] = auth_header()
+
+    # Inject W3C trace context so the RPC server can stitch this hop into the caller's
+    # trace. Runs in the calling coroutine before any FuturesSession/thread handoff, so it
+    # covers both sync and fire_and_forget paths. No-op when no tracer provider/active span.
+    inject_trace_context(headers)
 
     payload = json.dumps(assoc(json_data, 'id', 0), default=unsupported_object_json_encoder, option=json.OPT_NAIVE_UTC | json.OPT_NON_STR_KEYS)
 
