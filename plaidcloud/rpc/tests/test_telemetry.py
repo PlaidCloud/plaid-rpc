@@ -12,11 +12,14 @@ from plaidcloud.rpc import telemetry
 
 
 @pytest.fixture(autouse=True)
-def _reset_initialized():
-    """init_tracing is idempotent via a module-level flag; reset it between tests."""
+def _reset_module_state():
+    """init_tracing is idempotent and tracing_enabled() caches its probe via module-level
+    globals; reset both between tests."""
     telemetry._initialized = False
+    telemetry._tracing_on = None
     yield
     telemetry._initialized = False
+    telemetry._tracing_on = None
 
 
 def test_pod_namespace_reads_downward_api_file():
@@ -46,11 +49,43 @@ def test_org_id_non_tenant_is_admins(monkeypatch):
     assert telemetry.telemetry_org_id() == "admins"
 
 
-def test_tracing_enabled_flag(monkeypatch):
-    monkeypatch.setenv("PLAID_TRACING_ENABLED", "TRUE")
+def test_collector_reachable_parses_host_and_resolves():
+    gai = mock.Mock(return_value=[("x",)])
+    with mock.patch("socket.getaddrinfo", gai):
+        assert telemetry._collector_reachable("tempo-distributor.cluster-components.svc:4317") is True
+        assert gai.call_args[0][0] == "tempo-distributor.cluster-components.svc"   # port stripped
+        assert telemetry._collector_reachable("http://tempo-distributor.cluster-components.svc:4318") is True
+        assert gai.call_args[0][0] == "tempo-distributor.cluster-components.svc"   # scheme + port stripped
+
+
+def test_collector_unreachable_on_resolve_failure():
+    with mock.patch("socket.getaddrinfo", mock.Mock(side_effect=OSError)):
+        assert telemetry._collector_reachable("nope:4317") is False
+
+
+def test_tracing_on_by_default_when_collector_reachable(monkeypatch):
+    monkeypatch.delenv("PLAID_TRACING_ENABLED", raising=False)   # no env var → default on
+    monkeypatch.setattr(telemetry, "_collector_reachable", lambda ep: True)
     assert telemetry.tracing_enabled() is True
+
+
+def test_tracing_off_when_flag_false(monkeypatch):
     monkeypatch.setenv("PLAID_TRACING_ENABLED", "false")
+    monkeypatch.setattr(telemetry, "_collector_reachable", lambda ep: True)
     assert telemetry.tracing_enabled() is False
+
+
+def test_tracing_off_when_collector_unreachable(monkeypatch):
+    monkeypatch.delenv("PLAID_TRACING_ENABLED", raising=False)   # default on...
+    monkeypatch.setattr(telemetry, "_collector_reachable", lambda ep: False)
+    assert telemetry.tracing_enabled() is False                 # ...but no collector → off
+
+
+def test_tracing_enabled_probe_is_cached(monkeypatch):
+    monkeypatch.setattr(telemetry, "_collector_reachable", lambda ep: True)
+    assert telemetry.tracing_enabled() is True
+    monkeypatch.setattr(telemetry, "_collector_reachable", lambda ep: False)  # flip
+    assert telemetry.tracing_enabled() is True                 # cached, not re-probed
 
 
 def test_init_tracing_noop_when_disabled(monkeypatch):
@@ -72,7 +107,7 @@ def test_sample_ratio_default_clamp_and_malformed(monkeypatch):
 
 
 def _install_and_capture(service="plaid-rpc-test", org_id=None):
-    with mock.patch(
+    with mock.patch.object(telemetry, "_collector_reachable", return_value=True), mock.patch(
         "opentelemetry.exporter.otlp.proto.grpc.trace_exporter.OTLPSpanExporter"
     ) as exporter, mock.patch(
         "opentelemetry.sdk.trace.export.BatchSpanProcessor"
