@@ -16,11 +16,13 @@ _initialized = False
 
 
 def _pod_namespace():
-    """The pod's own K8s namespace, from the downward-API file then POD_NAMESPACE env."""
+    """The pod's own K8s namespace, from the downward-API file then POD_NAMESPACE env.
+    Any read failure falls back to the env var — this runs during startup and must not
+    crash the process."""
     try:
         with open(_DOWNWARD_API_NAMESPACE) as ns:
             return ns.read().strip()
-    except (FileNotFoundError, PermissionError):
+    except OSError:
         return os.environ.get("POD_NAMESPACE", "").strip()
 
 
@@ -59,6 +61,9 @@ def init_tracing(service_name, org_id=None):
     ``org_id`` overrides the resolved org-id — pass it when the caller derives the tenant
     differently (e.g. cp-rest), otherwise ``telemetry_org_id()`` is used.
     """
+    # Called once at process startup before request handling, so the check-then-set on
+    # _initialized is not guarded by a lock; the OTel provider's own set-once guard is the
+    # backstop if that assumption is ever violated.
     global _initialized
     if not tracing_enabled():
         return False
@@ -98,8 +103,11 @@ def init_tracing(service_name, org_id=None):
 
 
 def inject_trace_context(carrier):
-    """Inject W3C traceparent/tracestate into a header dict. No-op with no active span,
-    so it is safe to call unconditionally on every outbound RPC."""
+    """Inject W3C traceparent/tracestate into a header dict. Zero-cost (returns before
+    importing/using OTel) unless init_tracing has installed a provider, so it is safe to
+    call unconditionally on every outbound RPC even when tracing is disabled."""
+    if not _initialized:
+        return
     from opentelemetry import propagate
 
     propagate.inject(carrier)

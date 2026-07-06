@@ -111,13 +111,22 @@ def test_init_tracing_is_idempotent(monkeypatch):
     assert not set_provider.called
 
 
-def test_inject_is_noop_without_active_span():
+def test_inject_skipped_when_not_initialized():
+    telemetry._initialized = False
+    carrier = {}
+    telemetry.inject_trace_context(carrier)
+    assert carrier == {}
+
+
+def test_inject_is_noop_without_active_span_when_initialized():
+    telemetry._initialized = True
     carrier = {}
     telemetry.inject_trace_context(carrier)
     assert "traceparent" not in carrier
 
 
 def test_inject_writes_traceparent_under_active_span():
+    telemetry._initialized = True
     provider = TracerProvider(sampler=ALWAYS_ON)
     tracer = provider.get_tracer("test")
     carrier = {}
