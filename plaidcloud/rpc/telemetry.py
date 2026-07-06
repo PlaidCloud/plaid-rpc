@@ -10,6 +10,9 @@ is true — importing this module has no effect until ``init_tracing`` is called
 import os
 
 _DOWNWARD_API_NAMESPACE = "/var/run/secrets/kubernetes.io/serviceaccount/namespace"
+_DEFAULT_SAMPLE_RATIO = 0.05
+
+_initialized = False
 
 
 def _pod_namespace():
@@ -37,15 +40,30 @@ def tracing_enabled():
     return os.environ.get("PLAID_TRACING_ENABLED", "false").lower() == "true"
 
 
+def _sample_ratio():
+    """Sampling ratio from PLAID_TRACING_SAMPLE_RATIO, clamped to [0, 1]; a malformed
+    value falls back to the default rather than crashing the service at startup."""
+    try:
+        ratio = float(os.environ.get("PLAID_TRACING_SAMPLE_RATIO", _DEFAULT_SAMPLE_RATIO))
+    except ValueError:
+        return _DEFAULT_SAMPLE_RATIO
+    return min(1.0, max(0.0, ratio))
+
+
 def init_tracing(service_name, org_id=None):
     """Install a global TracerProvider exporting to Tempo over OTLP gRPC.
 
-    Call once per process at startup. No-op (returns False) when tracing is disabled.
-    ``org_id`` overrides the resolved org-id — pass it when the caller derives the
-    tenant differently (e.g. cp-rest), otherwise ``telemetry_org_id()`` is used.
+    Call once per process at startup. Returns True if tracing is active (this call or a
+    prior one installed the provider), False when disabled. Idempotent: a second call is a
+    no-op — OTel's provider is process-wide set-once, so re-installing would silently fail.
+    ``org_id`` overrides the resolved org-id — pass it when the caller derives the tenant
+    differently (e.g. cp-rest), otherwise ``telemetry_org_id()`` is used.
     """
+    global _initialized
     if not tracing_enabled():
         return False
+    if _initialized:
+        return True
 
     # Imported lazily so the SDK is not a hard import cost for every plaidcloud.rpc user.
     from opentelemetry import trace
@@ -59,7 +77,7 @@ def init_tracing(service_name, org_id=None):
     endpoint = os.environ.get(
         "PLAID_TRACING_OTLP_ENDPOINT", "tempo-distributor.cluster-components.svc:4317"
     )
-    ratio = float(os.environ.get("PLAID_TRACING_SAMPLE_RATIO", "0.05"))
+    ratio = _sample_ratio()
 
     provider = TracerProvider(
         resource=Resource.create({
@@ -75,6 +93,7 @@ def init_tracing(service_name, org_id=None):
         headers=(("x-scope-orgid", org),),      # gRPC metadata is lowercase
     )))
     trace.set_tracer_provider(provider)
+    _initialized = True
     return True
 
 

@@ -3,11 +3,20 @@
 
 from unittest import mock
 
+import pytest
 from opentelemetry import trace
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.sampling import ALWAYS_ON
 
 from plaidcloud.rpc import telemetry
+
+
+@pytest.fixture(autouse=True)
+def _reset_initialized():
+    """init_tracing is idempotent via a module-level flag; reset it between tests."""
+    telemetry._initialized = False
+    yield
+    telemetry._initialized = False
 
 
 def test_pod_namespace_reads_downward_api_file():
@@ -49,20 +58,57 @@ def test_init_tracing_noop_when_disabled(monkeypatch):
     assert telemetry.init_tracing("svc") is False
 
 
-def test_init_tracing_installs_provider(monkeypatch):
-    monkeypatch.setenv("PLAID_TRACING_ENABLED", "true")
-    monkeypatch.setenv("POD_NAMESPACE", "pw-tartan")
-    monkeypatch.setenv("PLAID_TRACING_SAMPLE_RATIO", "1.0")
+def test_sample_ratio_default_clamp_and_malformed(monkeypatch):
+    monkeypatch.delenv("PLAID_TRACING_SAMPLE_RATIO", raising=False)
+    assert telemetry._sample_ratio() == 0.05
+    monkeypatch.setenv("PLAID_TRACING_SAMPLE_RATIO", "0.5")
+    assert telemetry._sample_ratio() == 0.5
+    monkeypatch.setenv("PLAID_TRACING_SAMPLE_RATIO", "9")     # clamps to 1.0
+    assert telemetry._sample_ratio() == 1.0
+    monkeypatch.setenv("PLAID_TRACING_SAMPLE_RATIO", "-3")    # clamps to 0.0
+    assert telemetry._sample_ratio() == 0.0
+    monkeypatch.setenv("PLAID_TRACING_SAMPLE_RATIO", "notafloat")  # falls back
+    assert telemetry._sample_ratio() == 0.05
+
+
+def _install_and_capture(service="plaid-rpc-test", org_id=None):
     with mock.patch(
         "opentelemetry.exporter.otlp.proto.grpc.trace_exporter.OTLPSpanExporter"
     ) as exporter, mock.patch(
         "opentelemetry.sdk.trace.export.BatchSpanProcessor"
     ), mock.patch("opentelemetry.trace.set_tracer_provider") as set_provider:
-        assert telemetry.init_tracing("plaid-rpc-test") is True
-        # org-id flows into the exporter as lowercase gRPC metadata
-        _, kwargs = exporter.call_args
-        assert kwargs["headers"] == (("x-scope-orgid", "pw-tartan"),)
-        assert set_provider.called
+        result = telemetry.init_tracing(service, org_id=org_id)
+        return result, exporter, set_provider
+
+
+def test_init_tracing_installs_provider(monkeypatch):
+    monkeypatch.setenv("PLAID_TRACING_ENABLED", "true")
+    monkeypatch.setenv("POD_NAMESPACE", "pw-tartan")
+    result, exporter, set_provider = _install_and_capture()
+    assert result is True
+    # org-id flows into the exporter as lowercase gRPC metadata
+    _, kwargs = exporter.call_args
+    assert kwargs["headers"] == (("x-scope-orgid", "pw-tartan"),)
+    assert set_provider.called
+
+
+def test_init_tracing_org_id_override(monkeypatch):
+    monkeypatch.setenv("PLAID_TRACING_ENABLED", "true")
+    monkeypatch.setenv("POD_NAMESPACE", "pw-tartan")     # would resolve to pw-tartan...
+    _, exporter, _ = _install_and_capture(org_id="admins")  # ...but override wins
+    _, kwargs = exporter.call_args
+    assert kwargs["headers"] == (("x-scope-orgid", "admins"),)
+
+
+def test_init_tracing_is_idempotent(monkeypatch):
+    monkeypatch.setenv("PLAID_TRACING_ENABLED", "true")
+    monkeypatch.setenv("POD_NAMESPACE", "pw-tartan")
+    assert _install_and_capture()[0] is True
+    # second call: already initialized → returns True but does not rebuild the exporter
+    result, exporter, set_provider = _install_and_capture()
+    assert result is True
+    assert not exporter.called
+    assert not set_provider.called
 
 
 def test_inject_is_noop_without_active_span():
