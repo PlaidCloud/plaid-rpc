@@ -3,16 +3,24 @@
 
 Single-tenant per process: each RPC pod serves one tenant, so a static
 ``X-Scope-OrgID`` (the pod's own ``pw-<tenant>``/``ps-<tenant>`` namespace) is set
-once at startup and rides every span export. Inert unless ``PLAID_TRACING_ENABLED``
-is true — importing this module has no effect until ``init_tracing`` is called.
+once at startup and rides every span export.
+
+Tracing is **on by default** — no env var required. It self-enables only where the
+OTLP collector is actually resolvable, so it lights up in clusters that run Tempo and
+stays cleanly off (no failing exporter) where Tempo isn't deployed. Set
+``PLAID_TRACING_ENABLED=false`` to force it off regardless. Importing this module has
+no effect until ``init_tracing`` is called.
 """
 
 import os
+import socket
 
 _DOWNWARD_API_NAMESPACE = "/var/run/secrets/kubernetes.io/serviceaccount/namespace"
 _DEFAULT_SAMPLE_RATIO = 0.05
+_DEFAULT_ENDPOINT = "tempo-distributor.cluster-components.svc:4317"
 
 _initialized = False
+_tracing_on = None  # cached tracing_enabled() result (flag ∧ collector reachable)
 
 
 def _pod_namespace():
@@ -38,8 +46,30 @@ def telemetry_org_id():
     return ns if ns.startswith(("pw-", "ps-")) else "admins"
 
 
+def _endpoint():
+    return os.environ.get("PLAID_TRACING_OTLP_ENDPOINT", _DEFAULT_ENDPOINT)
+
+
+def _collector_reachable(endpoint):
+    """Whether the OTLP collector host resolves. Keeps default-on tracing from installing
+    a doomed exporter (and spamming export errors) in clusters where Tempo isn't deployed."""
+    host = endpoint.split("://", 1)[-1].rsplit(":", 1)[0]
+    try:
+        socket.getaddrinfo(host, None)
+        return True
+    except OSError:
+        return False
+
+
 def tracing_enabled():
-    return os.environ.get("PLAID_TRACING_ENABLED", "false").lower() == "true"
+    """Whether tracing should run: on by default (``PLAID_TRACING_ENABLED`` defaults true;
+    set it to ``false`` to force off) **and** the OTLP collector is resolvable. The
+    reachability probe runs once and is cached, so this is cheap on the hot path."""
+    global _tracing_on
+    if _tracing_on is None:
+        flag = os.environ.get("PLAID_TRACING_ENABLED", "true").lower() == "true"
+        _tracing_on = flag and _collector_reachable(_endpoint())
+    return _tracing_on
 
 
 def _sample_ratio():
@@ -79,9 +109,7 @@ def init_tracing(service_name, org_id=None):
     from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
 
     org = org_id or telemetry_org_id()
-    endpoint = os.environ.get(
-        "PLAID_TRACING_OTLP_ENDPOINT", "tempo-distributor.cluster-components.svc:4317"
-    )
+    endpoint = _endpoint()
     ratio = _sample_ratio()
 
     provider = TracerProvider(
