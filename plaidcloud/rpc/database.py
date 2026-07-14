@@ -203,6 +203,21 @@ class PlaidNumeric(TypeDecorator):
             return self.impl
 
 
+class PlaidCurrency(TypeDecorator):
+    """Money type that renders an explicit DECIMAL(18, 4) on every dialect.
+
+    Precision <= 18 keeps Databend values on 8-byte Decimal64 (and Parquet on
+    INT64); a bare NUMERIC falls back to Databend's DECIMAL(38, 10) default,
+    so the precision is always emitted explicitly.
+    """
+    impl = DECIMAL(18, 4)
+    cache_ok = True
+
+    def load_dialect_impl(self, dialect):
+        asdecimal = not is_dialect_snowflake_based(dialect)  # Same snowflake quirk as PlaidNumeric
+        return dialect.type_descriptor(DECIMAL(18, 4, asdecimal=asdecimal))
+
+
 class PlaidUnicode(TypeDecorator):
     """Unicode Type that implements as UnicodeText on Postgresql based environments
 

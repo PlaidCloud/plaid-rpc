@@ -21,7 +21,7 @@ from plaidcloud.rpc.type_conversion import (
 )
 from plaidcloud.rpc.messytables.core import Cell
 from plaidcloud.rpc.database import (
-    PlaidUnicode, PlaidNumeric, PlaidTimestamp, PlaidJSON, GUIDHyphens, PlaidTinyInt,
+    PlaidNumeric, PlaidCurrency, PlaidTimestamp, PlaidJSON, GUIDHyphens,
 )
 
 
@@ -116,6 +116,7 @@ class TestPandasDtypeFromSql:
         ('integer', 'Int64'),
         ('bigint', 'Int64'),
         ('numeric', 'float64'),
+        ('currency', 'float64'),
         ('timestamp', 'datetime64[s]'),
         ('interval', 'timedelta64[s]'),
         ('date', 'datetime64[s]'),
@@ -172,6 +173,16 @@ class TestSqlalchemyFromDtype:
 
     def test_largebinary(self):
         assert sqlalchemy_from_dtype('largebinary') is LargeBinary
+
+    def test_currency(self):
+        assert sqlalchemy_from_dtype('currency') is PlaidCurrency
+
+    def test_currency_source_spelling_still_infers_numeric(self):
+        # The user-selected dtype and the source-type spelling are distinct:
+        # inference keeps collapsing 'currency' source names to numeric, so
+        # only an explicitly stored 'currency' dtype reaches PlaidCurrency.
+        assert analyze_type('currency') == 'numeric'
+        assert sqlalchemy_from_dtype(analyze_type('currency')) is PlaidNumeric
 
 
 class TestPostgresToPythonDateFormat:
@@ -293,6 +304,18 @@ class TestArrowTypeFromAnalyzeType:
     def test_integer_type(self):
         result = arrow_type_from_analyze_type('integer')
         assert result is not None
+
+    @_REQUIRES_JSON
+    def test_currency_is_decimal128_18_4(self):
+        import pyarrow
+        assert arrow_type_from_analyze_type('currency') == pyarrow.decimal128(18, 4)
+
+    @_REQUIRES_JSON
+    def test_currency_ignores_use_decimal_type(self):
+        # use_decimal_type is only set by SF/MSSQL callers; currency must not
+        # widen to decimal128(38, 10) there.
+        import pyarrow
+        assert arrow_type_from_analyze_type('currency', use_decimal_type=True) == pyarrow.decimal128(18, 4)
 
     def test_import_error_raises(self):
         # Simulate pyarrow not being installed

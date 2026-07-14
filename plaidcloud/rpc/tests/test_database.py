@@ -21,6 +21,7 @@ from plaidcloud.rpc.database import (
     StartPath,
     PlaidTimestamp,
     PlaidNumeric,
+    PlaidCurrency,
     PlaidUnicode,
     PlaidJSON,
     PlaidTinyInt,
@@ -268,6 +269,49 @@ class TestPlaidNumericDialect:
         pn = PlaidNumeric()
         impl = pn.load_dialect_impl(pg)
         assert impl is pn.impl or impl is not None
+
+
+class TestPlaidCurrencyDDL:
+    """The emitted DDL is load-bearing: a bare NUMERIC falls back to
+    DECIMAL(38, 10) on Databend, which doubles storage to Decimal128."""
+
+    def test_default_compile_is_explicit_18_4(self):
+        assert str(PlaidCurrency()) == 'DECIMAL(18, 4)'
+
+    @pytest.mark.parametrize('dialect_factory', [PGDialect, MSDialect, MySQLDialect])
+    def test_core_dialects_emit_18_4(self, dialect_factory):
+        compiled = PlaidCurrency().compile(dialect=dialect_factory())
+        assert compiled in ('DECIMAL(18, 4)', 'NUMERIC(18, 4)')
+
+    @pytest.mark.skipif(DatabendDialect is None, reason="databend_sqlalchemy not installed")
+    def test_databend_emits_decimal_18_4(self):
+        assert PlaidCurrency().compile(dialect=DatabendDialect()) == 'DECIMAL(18, 4)'
+
+    @pytest.mark.skipif(StarRocksDialect is None, reason="starrocks not installed")
+    def test_starrocks_emits_18_4(self):
+        compiled = PlaidCurrency().compile(dialect=StarRocksDialect())
+        assert '18, 4' in compiled and compiled.upper().startswith(('DECIMAL', 'NUMERIC'))
+
+    @pytest.mark.skipif(SnowflakeDialect is None, reason="snowflake-sqlalchemy not installed")
+    def test_snowflake_emits_18_4(self):
+        compiled = PlaidCurrency().compile(dialect=SnowflakeDialect())
+        assert '(18, 4)' in compiled
+
+    def test_never_bare_numeric(self):
+        # Every dialect branch must carry explicit precision
+        for dialect in (PGDialect(), MSDialect(), MySQLDialect()):
+            impl = PlaidCurrency().load_dialect_impl(dialect)
+            assert impl.precision == 18 and impl.scale == 4
+            assert impl.asdecimal is True
+
+    @pytest.mark.skipif(SnowflakeDialect is None, reason="snowflake-sqlalchemy not installed")
+    def test_snowflake_returns_floats(self):
+        # The one asdecimal=False dialect — mirrors PlaidNumeric's snowflake quirk
+        assert PlaidCurrency().load_dialect_impl(SnowflakeDialect()).asdecimal is False
+
+    @pytest.mark.skipif(DatabendDialect is None, reason="databend_sqlalchemy not installed")
+    def test_databend_asdecimal_true(self):
+        assert PlaidCurrency().load_dialect_impl(DatabendDialect()).asdecimal is True
 
 
 class TestPlaidUnicodeDialect:

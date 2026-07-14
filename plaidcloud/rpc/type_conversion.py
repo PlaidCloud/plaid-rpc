@@ -10,7 +10,7 @@ if sqlalchemy.__version__.startswith('2.'):
 else:  # pragma: no cover
     from databend_sqlalchemy.types import DOUBLE
 from plaidcloud.rpc.database import (
-    PlaidUnicode, PlaidNumeric, PlaidTimestamp, PlaidJSON, GUIDHyphens, PlaidTinyInt, PlaidGeography, PlaidGeometry
+    PlaidUnicode, PlaidNumeric, PlaidCurrency, PlaidTimestamp, PlaidJSON, GUIDHyphens, PlaidTinyInt, PlaidGeography, PlaidGeometry
 )
 
 
@@ -109,6 +109,7 @@ _PANDAS_DTYPE_FROM_SQL = regex_map({
     r'^integer$': 'Int64',
     r'^bigint$': 'Int64',
     r'^numeric$': 'float64',
+    r'^currency$': 'float64',
     r'^decimal.*': 'float64',
     r'^timestamp\b.*': 'datetime64[s]',
     r'^interval$': 'timedelta64[s]',
@@ -141,6 +142,10 @@ def arrow_type_from_analyze_type(dtype: str, use_decimal_type: bool = False):
     if dtype.startswith('json'):
         # Numpy treats this like a generic object, specify json
         return json_()
+    if dtype == 'currency':
+        # Stored user-declared money type — always an exact decimal in parquet,
+        # regardless of use_decimal_type (which callers only set for SF/MSSQL).
+        return decimal128(18, 4)
     np_type = pandas_dtype_from_sql(dtype)
     if np_type == 'object':
         # Fall back to string
@@ -280,6 +285,12 @@ def analyze_type(dtype):
     Returns:
         (str): An analyze dtype. Should be one of ('text', 'numeric', 'smallint',
         'integer', 'bigint', 'boolean', 'date', 'time', 'timestamp', 'interval')
+
+    Note:
+        'currency' is a stored, user-selected analyze dtype that this function
+        never returns — the 'currency' *input* spelling here is a source type
+        name (e.g. MS Access Currency, a 19,4 decimal) and maps to 'numeric'
+        so inference can never auto-narrow money into DECIMAL(18, 4).
     Examples:
         >>> analyze_type('time')
         'time'
@@ -373,6 +384,7 @@ _sqlalchemy_from_dtype = regex_map({
     r'^bigint$': BIGINT,
     r'^float\d*': FLOAT,
     r'^numeric.*': PlaidNumeric,
+    r'^currency$': PlaidCurrency,
     r'^decimal.*': PlaidNumeric,
     r'^datetime.*': PlaidTimestamp,  # This may have to cover all datetimes
     r'^timestamp\b.*': PlaidTimestamp,
