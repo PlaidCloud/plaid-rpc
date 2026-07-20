@@ -39,6 +39,7 @@ dependencies = {file = ["requirements.txt"]}
 test = [
     "chardet>=2.3.0",
     "databend_sqlalchemy",
+    "databricks-sqlalchemy",
     "pandas",
     "pyarrow",
     "pytest",

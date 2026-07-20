@@ -34,6 +34,7 @@ from plaidcloud.rpc.database import (
     is_dialect_starrocks_based,
     is_dialect_snowflake_based,
     is_dialect_databend_based,
+    is_dialect_databricks_based,
 )
 
 try:
@@ -60,6 +61,11 @@ try:
     from databend_sqlalchemy.databend_dialect import DatabendDialect
 except ImportError:
     DatabendDialect = None
+
+try:
+    from databricks.sqlalchemy.base import DatabricksDialect
+except ImportError:
+    DatabricksDialect = None
 
 
 class TestStartPathNormalize:
@@ -225,6 +231,11 @@ class TestDialectChecks:
         assert is_dialect_databend_based(DatabendDialect()) is True
         assert is_dialect_databend_based(PGDialect()) is False
 
+    @pytest.mark.skipif(DatabricksDialect is None, reason="databricks-sqlalchemy not installed")
+    def test_is_databricks(self):
+        assert is_dialect_databricks_based(DatabricksDialect()) is True
+        assert is_dialect_databricks_based(PGDialect()) is False
+
     def test_cross_dialect_negative(self):
         pg = PGDialect()
         ms = MSDialect()
@@ -252,6 +263,15 @@ class TestPlaidTimestampDialect:
         from sqlalchemy.types import TIMESTAMP
         assert impl is ts.impl or type(impl) == TIMESTAMP or isinstance(impl, TIMESTAMP)
 
+    @pytest.mark.skipif(SnowflakeDialect is None, reason="snowflake-sqlalchemy not installed")
+    def test_snowflake_rides_plain_timestamp(self):
+        # NTZ semantics come from the pinned session TIMESTAMP_TYPE_MAPPING, not the DDL type
+        assert PlaidTimestamp().compile(dialect=SnowflakeDialect()) == 'TIMESTAMP'
+
+    @pytest.mark.skipif(DatabricksDialect is None, reason="databricks-sqlalchemy not installed")
+    def test_databricks_emits_timestamp_ntz(self):
+        assert PlaidTimestamp().compile(dialect=DatabricksDialect()) == 'TIMESTAMP_NTZ'
+
 
 class TestPlaidNumericDialect:
 
@@ -269,6 +289,12 @@ class TestPlaidNumericDialect:
         pn = PlaidNumeric()
         impl = pn.load_dialect_impl(pg)
         assert impl is pn.impl or impl is not None
+
+    @pytest.mark.skipif(DatabricksDialect is None, reason="databricks-sqlalchemy not installed")
+    def test_databricks_gets_decimal_38_10(self):
+        impl = PlaidNumeric().load_dialect_impl(DatabricksDialect())
+        assert impl.precision == 38 and impl.scale == 10 and impl.asdecimal is True
+        assert PlaidNumeric().compile(dialect=DatabricksDialect()) == 'DECIMAL(38, 10)'
 
 
 class TestPlaidCurrencyDDL:
@@ -328,6 +354,14 @@ class TestPlaidUnicodeDialect:
         impl = pu.load_dialect_impl(ms)
         assert impl is pu.impl or impl is not None
 
+    @pytest.mark.skipif(SnowflakeDialect is None, reason="snowflake-sqlalchemy not installed")
+    def test_snowflake_emits_varchar(self):
+        assert PlaidUnicode(length=255).compile(dialect=SnowflakeDialect()) == 'VARCHAR'
+
+    @pytest.mark.skipif(DatabricksDialect is None, reason="databricks-sqlalchemy not installed")
+    def test_databricks_emits_string(self):
+        assert PlaidUnicode(length=255).compile(dialect=DatabricksDialect()) == 'STRING'
+
 
 class TestPlaidJSONDialect:
 
@@ -343,6 +377,14 @@ class TestPlaidJSONDialect:
         impl = pj.load_dialect_impl(ms)
         assert impl is pj.impl or impl is not None
 
+    @pytest.mark.skipif(SnowflakeDialect is None, reason="snowflake-sqlalchemy not installed")
+    def test_snowflake_emits_variant(self):
+        assert PlaidJSON().compile(dialect=SnowflakeDialect()) == 'VARIANT'
+
+    @pytest.mark.skipif(DatabricksDialect is None, reason="databricks-sqlalchemy not installed")
+    def test_databricks_emits_variant(self):
+        assert PlaidJSON().compile(dialect=DatabricksDialect()) == 'VARIANT'
+
 
 class TestPlaidTinyIntDialect:
 
@@ -352,6 +394,15 @@ class TestPlaidTinyIntDialect:
         impl = pt.load_dialect_impl(pg)
         # Should return the default impl (SMALLINT)
         assert impl is pt.impl or impl is not None
+
+    @pytest.mark.skipif(SnowflakeDialect is None, reason="snowflake-sqlalchemy not installed")
+    def test_snowflake_uses_smallint(self):
+        # Deliberate: every Snowflake int type is NUMBER(38, 0), so the default impl fits
+        assert PlaidTinyInt().compile(dialect=SnowflakeDialect()) == 'SMALLINT'
+
+    @pytest.mark.skipif(DatabricksDialect is None, reason="databricks-sqlalchemy not installed")
+    def test_databricks_emits_tinyint(self):
+        assert PlaidTinyInt().compile(dialect=DatabricksDialect()) == 'TINYINT'
 
 
 class TestPlaidBitmapDialect:
