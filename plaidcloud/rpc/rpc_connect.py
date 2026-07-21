@@ -179,9 +179,10 @@ class PlaidXLConnect(SimpleRPC, PlaidXLConfig):
     """
 
     def __init__(self, *, rpc_uri: str, auth_token: str, workspace_id: str = '', project_id: str = '',
-                 verify_ssl: bool = False):
+                 verify_ssl: bool = True):
         PlaidXLConfig.__init__(self, rpc_uri=rpc_uri, auth_token=auth_token, workspace_id=workspace_id,
                                project_id=project_id)
-        # Defaults to False: PlaidXL installs already in the field have been running unverified,
-        # because SimpleRPC coerced its own None default to False (sc-23168).
+        # Defaults to True with the rest. PlaidXL addresses public tenant hostnames, but it also
+        # runs on end-user desktops, so it is the surface most exposed to a corporate TLS-
+        # inspecting proxy whose root CA is in the OS trust store and not in certifi's.
         SimpleRPC.__init__(self, self.auth_token, uri=self.rpc_uri, verify_ssl=verify_ssl)

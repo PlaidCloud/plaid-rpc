@@ -25,14 +25,14 @@ class TestPlaidXLConnect:
         assert rpc.workspace_uuid == 'ws1'
         assert rpc.project_id == 'p1'
 
-    def test_does_not_verify_by_default(self):
+    def test_verifies_by_default(self):
         rpc = PlaidXLConnect(rpc_uri='https://example.com/rpc', auth_token='t')
-        assert rpc.verify_ssl is False
-
-    def test_verify_ssl_reaches_the_transport(self):
-        rpc = PlaidXLConnect(rpc_uri='https://example.com/rpc', auth_token='t', verify_ssl=True)
         # SimpleRPC precedes PlaidXLConfig in the MRO, so this property is the transport's value.
         assert rpc.verify_ssl is True
+
+    def test_verify_ssl_can_be_turned_off(self):
+        rpc = PlaidXLConnect(rpc_uri='https://example.com/rpc', auth_token='t', verify_ssl=False)
+        assert rpc.verify_ssl is False
 
 
 class TestConnectVerifySsl:

@@ -313,9 +313,8 @@ class TestPlaidConfigEnvironment:
 
 
 class TestVerifySslResolution:
-    """verify_ssl is an option defaulting to True, but the two configuration sources that
-    predate it reaching the transport resolve to False so that honouring it changes nothing
-    for anything already deployed (sc-23168)."""
+    """verify_ssl defaults to True from every source (sc-23168). A deployment that must not
+    verify — one addressing an internal or self-signed endpoint — says so explicitly."""
 
     ENV = {
         '__PLAID_RPC_URI__': 'https://rpc.example.com',
@@ -331,19 +330,20 @@ class TestVerifySslResolution:
             monkeypatch.setenv(key, value)
         monkeypatch.delenv('__PLAID_VERIFY_SSL__', raising=False)
 
-    def test_environment_without_the_variable_does_not_verify(self, monkeypatch):
+    def test_environment_without_the_variable_verifies(self, monkeypatch):
         self._set_env(monkeypatch)
-        assert PlaidConfig(config_path=None).verify_ssl is False
-
-    def test_environment_variable_true_verifies(self, monkeypatch):
-        self._set_env(monkeypatch)
-        monkeypatch.setenv('__PLAID_VERIFY_SSL__', 'True')
         assert PlaidConfig(config_path=None).verify_ssl is True
+
+    def test_environment_variable_false_opts_out(self, monkeypatch):
+        """What JupyterHub sets, and what workflow-runner propagates into every UDF."""
+        self._set_env(monkeypatch)
+        monkeypatch.setenv('__PLAID_VERIFY_SSL__', 'False')
+        assert PlaidConfig(config_path=None).verify_ssl is False
 
     def test_argument_overrides_the_environment(self, monkeypatch):
         self._set_env(monkeypatch)
-        monkeypatch.setenv('__PLAID_VERIFY_SSL__', 'True')
-        assert PlaidConfig(config_path=None, verify_ssl=False).verify_ssl is False
+        monkeypatch.setenv('__PLAID_VERIFY_SSL__', 'False')
+        assert PlaidConfig(config_path=None, verify_ssl=True).verify_ssl is True
 
     def test_direct_arguments_verify_by_default(self):
         cfg = PlaidConfig(config_path=None, rpc_uri='https://t.plaid.cloud/json-rpc/',
@@ -355,11 +355,11 @@ class TestVerifySslResolution:
                           auth_token='tok', verify_ssl=False)
         assert cfg.verify_ssl is False
 
-    def test_plaid_conf_without_the_key_does_not_verify(self):
+    def test_plaid_conf_without_the_key_verifies(self):
         cfg = PlaidConfig(config_path='plaidcloud/rpc/tests/.plaid/plaid.conf')
-        assert cfg.verify_ssl is False
+        assert cfg.verify_ssl is True
 
-    def test_plaid_conf_key_is_honoured(self, tmp_path):
+    def test_plaid_conf_key_opts_out(self, tmp_path):
         conf = tmp_path / 'plaid.conf'
         conf.write_text(
             'user_id: 1\n'
@@ -368,9 +368,9 @@ class TestVerifySslResolution:
             'hostname: h\n'
             'realm: r\n'
             'workspace_uuid: ws\n'
-            'verify_ssl: true\n'
+            'verify_ssl: false\n'
         )
-        assert PlaidConfig(config_path=str(conf)).verify_ssl is True
+        assert PlaidConfig(config_path=str(conf)).verify_ssl is False
 
 
 
