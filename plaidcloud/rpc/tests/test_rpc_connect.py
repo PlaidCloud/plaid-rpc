@@ -6,6 +6,7 @@ from unittest import mock
 import pytest
 
 from plaidcloud.rpc import rpc_connect
+from plaidcloud.rpc.connection import jsonrpc
 from plaidcloud.rpc.rpc_connect import Connect, PlaidXLConnect
 
 
@@ -23,6 +24,53 @@ class TestPlaidXLConnect:
         assert rpc.auth_token == 'test-token'
         assert rpc.workspace_uuid == 'ws1'
         assert rpc.project_id == 'p1'
+
+    def test_verifies_by_default(self):
+        rpc = PlaidXLConnect(rpc_uri='https://example.com/rpc', auth_token='t')
+        # SimpleRPC precedes PlaidXLConfig in the MRO, so this property is the transport's value.
+        assert rpc.verify_ssl is True
+
+    def test_verify_ssl_can_be_turned_off(self):
+        rpc = PlaidXLConnect(rpc_uri='https://example.com/rpc', auth_token='t', verify_ssl=False)
+        assert rpc.verify_ssl is False
+
+
+class TestConnectVerifySsl:
+    """Connect used to build the transport without verify_ssl, so SimpleRPC coerced its own
+    None default to False and no Connect ever verified a certificate (sc-23168)."""
+
+    @staticmethod
+    def _transport_verify_ssl(verify_ssl):
+        """The value an RPC call actually hands the transport, which passes it to requests
+        as `verify=`. Asserting on the call rather than on Connect.verify_ssl is the point:
+        the two disagreed, and only this one decides whether a certificate is checked."""
+        connect = Connect.__new__(Connect)
+        connect.auth_token = 'tok'
+        connect.token_provider = None
+        connect.rpc_uri = 'https://example.com/json-rpc/'
+        connect.allow_transmit_func = lambda: True
+        connect.verify_ssl = verify_ssl
+        connect.ready()
+        with mock.patch.object(jsonrpc, 'http_json_rpc') as mock_http:
+            mock_http.return_value = {'ok': True, 'result': None}
+            connect.analyze.query.ping()
+        return mock_http.call_args.args[2]
+
+    def test_a_verifying_config_verifies_on_the_wire(self):
+        assert self._transport_verify_ssl(True) is True
+
+    def test_a_non_verifying_config_still_does_not_verify(self):
+        assert self._transport_verify_ssl(False) is False
+
+    @mock.patch('plaidcloud.rpc.rpc_connect.SimpleRPC.__init__')
+    def test_init_forwards_the_argument_to_the_config(self, mock_srpc_init, monkeypatch, tmp_path):
+        mock_srpc_init.return_value = None
+        monkeypatch.delenv('__PLAID_RPC_URI__', raising=False)
+        monkeypatch.chdir(tmp_path)
+        connect = Connect(rpc_uri='https://t.plaid.cloud/json-rpc/', auth_token='tok',
+                          verify_ssl=False)
+        assert connect.verify_ssl is False
+        assert mock_srpc_init.call_args.kwargs['verify_ssl'] is False
 
 
 class TestConnectDirectParams:

@@ -221,7 +221,7 @@ class PlaidConfig:
     write_from_local = False
 
     def __init__(self, config_path: [str, False], working_user='', *, rpc_uri='', auth_token='',
-                 token_provider=None, workspace_uuid='', project_id=''):
+                 token_provider=None, workspace_uuid='', project_id='', verify_ssl=None):
         """
         Configuration for running UDFs within Plaid
 
@@ -247,6 +247,12 @@ class PlaidConfig:
             workspace_uuid (str, optional): workspace/tenant id. Requires rpc_uri.
             project_id (str, optional): project id. Requires rpc_uri. Callers that never name a project
                 may omit it; the project_id property still raises if something later needs one.
+            verify_ssl (bool, optional): verify the RPC server's TLS certificate. Defaults to True,
+                as do both configuration sources — the __PLAID_VERIFY_SSL__ environment variable
+                and the plaid.conf verify_ssl key. Overrides whichever source configured the rest.
+                Until sc-23168 this never reached the transport, so a deployment that has been
+                running unverified against an internal or self-signed endpoint must now say so
+                explicitly, by setting __PLAID_VERIFY_SSL__='False' or verify_ssl: false.
 
         Raises:
             ValueError: if rpc_uri is given without a token or provider, or if workspace_uuid or
@@ -271,6 +277,9 @@ class PlaidConfig:
                 self.workspace_uuid = os.environ['__PLAID_WORKSPACE_UUID__']
                 self._workflow_id = os.environ['__PLAID_WORKFLOW_ID__']
                 self._step_id = os.environ['__PLAID_STEP_ID__']
+                # Absent means verify. An environment that must not verify has to say so —
+                # every deployed one already does (JupyterHub sets it, and workflow-runner
+                # propagates it into each UDF's environment).
                 self.verify_ssl = os.environ.get('__PLAID_VERIFY_SSL__', 'True') == 'True'
                 self.is_local = False
                 try:
@@ -361,6 +370,10 @@ class PlaidConfig:
             self._step_id = self.config.get('step_id', '')
             self.name = self.config.get('name')
             self.grant_type = self.config.get("grant_type", "code")
+            # Absent means verify, matching __PLAID_VERIFY_SSL__. No existing plaid.conf carries
+            # this key, so one pointed at an internal or self-signed endpoint has to add
+            # `verify_ssl: false`. The real ones all address public *.plaid.cloud hostnames.
+            self.verify_ssl = bool(self.config.get('verify_ssl', True))
 
             # No need for an auth code if we already have a token.
             self.auth_code = self.config.get('auth_code') if not self.auth_token else None
@@ -444,6 +457,9 @@ class PlaidConfig:
         else:
             _init_local_config()
 
+        if verify_ssl is not None:
+            self.verify_ssl = bool(verify_ssl)
+
     @property
     def all(self):
         return self._C
@@ -501,6 +517,10 @@ class PlaidConfig:
 
 
 class PlaidXLConfig(PlaidConfig):
+    # NOTE: do not assign self.verify_ssl here. PlaidXLConnect mixes this class in behind
+    # SimpleRPC, whose verify_ssl is a read-only property — a data descriptor that precedes
+    # this class in that MRO, so the assignment raises AttributeError. PlaidXLConnect passes
+    # the value straight to SimpleRPC.__init__ instead, and that property is what reads back.
     def __init__(self, *, rpc_uri: str, auth_token: str, workspace_id: str, project_id: str):
         self.rpc_uri = rpc_uri
         # self.auth_uri = os.environ.get('__PLAID_AUTH_URI__')
