@@ -5,7 +5,9 @@ Database Utility
 Utility functions for interacting with the database.
 """
 import errno
+import functools
 import getpass
+import json
 import logging
 import os
 import threading
@@ -18,7 +20,7 @@ import csv
 from operator import attrgetter
 
 from sqlalchemy.types import (TypeDecorator, DateTime, Unicode, CHAR, NVARCHAR, VARCHAR, UnicodeText, NUMERIC,
-                              TIMESTAMP, DATETIME, JSON, SMALLINT, VARBINARY, DECIMAL)
+                              TIMESTAMP, DATETIME, JSON, SMALLINT, VARBINARY, DECIMAL, String)
 
 
 import sqlalchemy
@@ -177,7 +179,11 @@ class PlaidTimestamp(TypeDecorator):
             str: Type Descriptor"""
         if is_dialect_starrocks_based(dialect) or is_dialect_sql_server_based(dialect):
             return dialect.type_descriptor(DATETIME)
+        if is_dialect_databricks_based(dialect):  # pragma: no cover - requires databricks
+            from databricks.sqlalchemy import TIMESTAMP_NTZ
+            return dialect.type_descriptor(TIMESTAMP_NTZ)
 
+        # Snowflake stays on the plain TIMESTAMP impl: sessions pin TIMESTAMP_TYPE_MAPPING=TIMESTAMP_NTZ
         return self.impl
 
 
@@ -195,6 +201,8 @@ class PlaidNumeric(TypeDecorator):
         Returns:
             str: Type Descriptor"""
         if is_dialect_starrocks_based(dialect):  # pragma: no cover - requires starrocks
+            return dialect.type_descriptor(DECIMAL(38, 10, asdecimal=True))
+        if is_dialect_databricks_based(dialect):  # pragma: no cover - requires databricks
             return dialect.type_descriptor(DECIMAL(38, 10, asdecimal=True))
         if is_dialect_sql_server_based(dialect) or is_dialect_mysql_based(dialect) or is_dialect_snowflake_based(dialect):
             return_decimals = not is_dialect_snowflake_based(dialect)  # Needed for snowflake, potentially useful for others.
@@ -240,6 +248,14 @@ class PlaidUnicode(TypeDecorator):
             return dialect.type_descriptor(UnicodeText)
         if is_dialect_databend_based(dialect):  # pragma: no cover - requires databend
             return dialect.type_descriptor(VARCHAR)
+        if is_dialect_snowflake_based(dialect):
+            # Length dropped deliberately (mirrors the databend branch): bare VARCHAR = 16MB max, while a
+            # declared length is enforced with truncation errors on Snowflake. Metadata readers see the
+            # reflected length change (255 -> 16777216)
+            return dialect.type_descriptor(VARCHAR)
+        if is_dialect_databricks_based(dialect):  # pragma: no cover - requires databricks
+            # No NVARCHAR on Databricks, and bare VARCHAR (no length) is invalid; STRING is the unbounded type
+            return dialect.type_descriptor(String)
 
         return self.impl
 
@@ -260,7 +276,11 @@ class PlaidTinyInt(TypeDecorator):
         """
         if is_dialect_databend_based(dialect):  # pragma: no cover - requires databend
             return dialect.type_descriptor(databend_dialect.TINYINT)
+        if is_dialect_databricks_based(dialect):  # pragma: no cover - requires databricks
+            from databricks.sqlalchemy import TINYINT
+            return dialect.type_descriptor(TINYINT)
 
+        # Snowflake needs no branch: every Snowflake integer type is NUMBER(38, 0), so SMALLINT already fits
         return self.impl
 
 class PlaidGeometry(TypeDecorator):  # pragma: no cover - requires databend
@@ -287,6 +307,61 @@ class PlaidGeography(TypeDecorator):  # pragma: no cover - requires databend
         return self.impl
 
 
+@functools.lru_cache(maxsize=1)
+def _snowflake_json_variant():
+    """snowflake-sqlalchemy can't compile the generic JSON type, and its VARIANT is a bare
+    TypeEngine — binding a dict raises ProgrammingError 255001. Mirror DatabricksVariant:
+    serialize binds to a JSON string wrapped in PARSE_JSON, parse reads back to objects.
+    Memoized so class identity is stable across calls — TypeEngine cache keys lead with the
+    class, so a fresh class per call would churn SQLAlchemy's compiled-statement cache.
+    """
+    from snowflake.sqlalchemy import VARIANT
+
+    class JSONVariant(VARIANT):
+        cache_ok = True
+
+        def bind_processor(self, dialect):
+            def process(value):
+                if value is None:
+                    return None
+                return json.dumps(value, ensure_ascii=False, separators=(',', ':'))
+            return process
+
+        def bind_expression(self, bindvalue):
+            return sqlalchemy.func.PARSE_JSON(bindvalue)
+
+        def result_processor(self, dialect, coltype):
+            def process(value):
+                if value is None:
+                    return None
+                return json.loads(value)
+            return process
+
+    return JSONVariant
+
+
+@functools.lru_cache(maxsize=1)
+def _databricks_json_variant():  # pragma: no cover - requires databricks
+    """databricks-sqlalchemy can't compile the generic JSON type; DatabricksVariant renders VARIANT
+    and binds via json.dumps + PARSE_JSON (requires DBR 15.3+, satisfied by serverless warehouses),
+    but reads come back as JSON strings — parse them for parity with JSONB. Memoized for stable
+    class identity, same as the snowflake variant.
+    """
+    from databricks.sqlalchemy import DatabricksVariant
+
+    class JSONVariant(DatabricksVariant):
+        cache_ok = True
+
+        def result_processor(self, dialect, coltype):
+            def process(value):
+                if value is None:
+                    return None
+                return json.loads(value)
+            return process
+
+    return JSONVariant
+
+
 class PlaidJSON(TypeDecorator):
     """JSON type that implements as JSONB on Postgresql based environments
 
@@ -307,6 +382,10 @@ class PlaidJSON(TypeDecorator):
         """
         if is_dialect_postgresql_based(dialect):
             return dialect.type_descriptor(JSONB)
+        if is_dialect_snowflake_based(dialect):
+            return dialect.type_descriptor(_snowflake_json_variant())
+        if is_dialect_databricks_based(dialect):  # pragma: no cover - requires databricks
+            return dialect.type_descriptor(_databricks_json_variant())
 
         return self.impl
 
@@ -870,6 +949,30 @@ def is_dialect_databend_based(dialect):
     except ImportError:  # pragma: no cover
         return False
     return isinstance(dialect, DatabendDialect)
+
+
+def is_dialect_databricks_based(dialect):
+    """Is a dialect derived from underlying Databricks dialect
+
+    Args:
+        dialect (sqlalchemy.engine.interfaces.Dialect): The dialect to test
+
+    Returns:
+        bool: If the dialect is a descendant of the Databricks base dialect
+
+    Examples:
+        >>> is_dialect_databricks_based(DatabricksDialect())
+        True
+        >>> is_dialect_databricks_based(SnowflakeDialect())
+        False
+        >>> is_dialect_databricks_based(GreenplumDialect())
+        False
+    """
+    try:
+        from databricks.sqlalchemy.base import DatabricksDialect
+    except ImportError:  # pragma: no cover
+        return False
+    return isinstance(dialect, DatabricksDialect)
 
 
 def get_compiled_table_name(engine, schema, table_name):
