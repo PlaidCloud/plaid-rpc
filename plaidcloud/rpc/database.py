@@ -5,6 +5,7 @@ Database Utility
 Utility functions for interacting with the database.
 """
 import errno
+import functools
 import getpass
 import json
 import logging
@@ -306,6 +307,61 @@ class PlaidGeography(TypeDecorator):  # pragma: no cover - requires databend
         return self.impl
 
 
+@functools.lru_cache(maxsize=1)
+def _snowflake_json_variant():
+    """snowflake-sqlalchemy can't compile the generic JSON type, and its VARIANT is a bare
+    TypeEngine — binding a dict raises ProgrammingError 255001. Mirror DatabricksVariant:
+    serialize binds to a JSON string wrapped in PARSE_JSON, parse reads back to objects.
+    Memoized so class identity is stable across calls — TypeEngine cache keys lead with the
+    class, so a fresh class per call would churn SQLAlchemy's compiled-statement cache.
+    """
+    from snowflake.sqlalchemy import VARIANT
+
+    class JSONVariant(VARIANT):
+        cache_ok = True
+
+        def bind_processor(self, dialect):
+            def process(value):
+                if value is None:
+                    return None
+                return json.dumps(value, ensure_ascii=False, separators=(',', ':'))
+            return process
+
+        def bind_expression(self, bindvalue):
+            return sqlalchemy.func.PARSE_JSON(bindvalue)
+
+        def result_processor(self, dialect, coltype):
+            def process(value):
+                if value is None:
+                    return None
+                return json.loads(value)
+            return process
+
+    return JSONVariant
+
+
+@functools.lru_cache(maxsize=1)
+def _databricks_json_variant():  # pragma: no cover - requires databricks
+    """databricks-sqlalchemy can't compile the generic JSON type; DatabricksVariant renders VARIANT
+    and binds via json.dumps + PARSE_JSON (requires DBR 15.3+, satisfied by serverless warehouses),
+    but reads come back as JSON strings — parse them for parity with JSONB. Memoized for stable
+    class identity, same as the snowflake variant.
+    """
+    from databricks.sqlalchemy import DatabricksVariant
+
+    class JSONVariant(DatabricksVariant):
+        cache_ok = True
+
+        def result_processor(self, dialect, coltype):
+            def process(value):
+                if value is None:
+                    return None
+                return json.loads(value)
+            return process
+
+    return JSONVariant
+
+
 class PlaidJSON(TypeDecorator):
     """JSON type that implements as JSONB on Postgresql based environments
 
@@ -327,49 +383,9 @@ class PlaidJSON(TypeDecorator):
         if is_dialect_postgresql_based(dialect):
             return dialect.type_descriptor(JSONB)
         if is_dialect_snowflake_based(dialect):
-            # snowflake-sqlalchemy can't compile the generic JSON type, and its VARIANT is a bare
-            # TypeEngine — binding a dict raises ProgrammingError 255001. Mirror DatabricksVariant:
-            # serialize binds to a JSON string wrapped in PARSE_JSON, parse reads back to objects
-            from snowflake.sqlalchemy import VARIANT
-
-            class JSONVariant(VARIANT):
-                cache_ok = True
-
-                def bind_processor(self, dialect):
-                    def process(value):
-                        if value is None:
-                            return None
-                        return json.dumps(value, ensure_ascii=False, separators=(',', ':'))
-                    return process
-
-                def bind_expression(self, bindvalue):
-                    return sqlalchemy.func.PARSE_JSON(bindvalue)
-
-                def result_processor(self, dialect, coltype):
-                    def process(value):
-                        if value is None:
-                            return None
-                        return json.loads(value)
-                    return process
-
-            return dialect.type_descriptor(JSONVariant)
+            return dialect.type_descriptor(_snowflake_json_variant())
         if is_dialect_databricks_based(dialect):  # pragma: no cover - requires databricks
-            # databricks-sqlalchemy can't compile the generic JSON type; DatabricksVariant renders VARIANT
-            # and binds via json.dumps + PARSE_JSON (requires DBR 15.3+, satisfied by serverless
-            # warehouses), but reads come back as JSON strings — parse them for parity with JSONB
-            from databricks.sqlalchemy import DatabricksVariant
-
-            class JSONVariant(DatabricksVariant):
-                cache_ok = True
-
-                def result_processor(self, dialect, coltype):
-                    def process(value):
-                        if value is None:
-                            return None
-                        return json.loads(value)
-                    return process
-
-            return dialect.type_descriptor(JSONVariant)
+            return dialect.type_descriptor(_databricks_json_variant())
 
         return self.impl
 

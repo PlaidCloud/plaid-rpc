@@ -415,6 +415,34 @@ class TestPlaidJSONDialect:
         compiled = str(table.insert().values(j={'a': 1}).compile(dialect=dialect))
         assert 'PARSE_JSON' in compiled
 
+    @pytest.mark.skipif(SnowflakeDialect is None, reason="snowflake-sqlalchemy not installed")
+    def test_snowflake_variant_class_identity_stable(self):
+        # A fresh class per load_dialect_impl call would churn SQLAlchemy's type-level caching:
+        # TypeEngine._static_cache_key leads with the class
+        import sqlalchemy as sa
+        dialect = SnowflakeDialect()
+        impl1 = PlaidJSON().load_dialect_impl(dialect)
+        impl2 = PlaidJSON().load_dialect_impl(dialect)
+        assert type(impl1) is type(impl2)
+        assert impl1._static_cache_key == impl2._static_cache_key
+        table = sa.Table('t', sa.MetaData(), sa.Column('j', PlaidJSON()))
+        key1 = table.insert().values(j={'a': 1})._generate_cache_key()
+        key2 = table.insert().values(j={'a': 1})._generate_cache_key()
+        assert key1 == key2
+
+    @pytest.mark.skipif(DatabricksDialect is None, reason="databricks-sqlalchemy not installed")
+    def test_databricks_variant_class_identity_stable(self):
+        import sqlalchemy as sa
+        dialect = DatabricksDialect()
+        impl1 = PlaidJSON().load_dialect_impl(dialect)
+        impl2 = PlaidJSON().load_dialect_impl(dialect)
+        assert type(impl1) is type(impl2)
+        assert impl1._static_cache_key == impl2._static_cache_key
+        table = sa.Table('t', sa.MetaData(), sa.Column('j', PlaidJSON()))
+        key1 = table.insert().values(j={'a': 1})._generate_cache_key()
+        key2 = table.insert().values(j={'a': 1})._generate_cache_key()
+        assert key1 == key2
+
 
 class TestPlaidTinyIntDialect:
 
