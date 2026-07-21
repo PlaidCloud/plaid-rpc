@@ -179,6 +179,112 @@ class TestFindWorkspaceRoot:
         assert str(result) == str(d)
 
 
+class TestPlaidConfigDirectParams:
+    """Tests configuring PlaidConfig from explicit arguments, with neither environment
+    variables nor a plaid.conf available."""
+
+    def test_configures_without_env_or_file(self, monkeypatch, tmp_path):
+        monkeypatch.delenv('__PLAID_RPC_URI__', raising=False)
+        monkeypatch.delenv('__PLAID_RPC_AUTH_TOKEN__', raising=False)
+        monkeypatch.chdir(tmp_path)  # nothing to find if it were to look
+        cfg = PlaidConfig(
+            config_path=None, rpc_uri='https://t.plaid.cloud/json-rpc/', auth_token='tok',
+            workspace_uuid='ws', project_id='pid',
+        )
+        assert cfg.rpc_uri == 'https://t.plaid.cloud/json-rpc/'
+        assert cfg.auth_token == 'tok'
+        assert cfg.workspace_uuid == 'ws'
+        assert cfg.project_id == 'pid'
+        assert cfg.hostname == 't.plaid.cloud'
+        assert cfg.is_local is False
+
+    def test_explicit_args_win_over_environment(self, monkeypatch):
+        monkeypatch.setenv('__PLAID_RPC_URI__', 'https://from-env.example.com/json-rpc/')
+        monkeypatch.setenv('__PLAID_RPC_AUTH_TOKEN__', 'env-tok')
+        monkeypatch.setenv('__PLAID_PROJECT_ID__', 'env-pid')
+        monkeypatch.setenv('__PLAID_WORKSPACE_UUID__', 'env-ws')
+        monkeypatch.setenv('__PLAID_WORKFLOW_ID__', 'env-wf')
+        monkeypatch.setenv('__PLAID_STEP_ID__', 'env-step')
+        cfg = PlaidConfig(config_path=None, rpc_uri='https://direct.example.com/json-rpc/',
+                          auth_token='direct-tok')
+        assert cfg.rpc_uri == 'https://direct.example.com/json-rpc/'
+        assert cfg.auth_token == 'direct-tok'
+
+    def test_token_provider_accepted_without_auth_token(self):
+        cfg = PlaidConfig(config_path=None, rpc_uri='https://t.plaid.cloud/json-rpc/',
+                          token_provider=lambda: 'fresh')
+        assert cfg.token_provider() == 'fresh'
+        assert cfg.auth_token == ''
+
+    def test_requires_a_token_or_provider(self):
+        with pytest.raises(ValueError, match='auth_token or token_provider'):
+            PlaidConfig(config_path=None, rpc_uri='https://t.plaid.cloud/json-rpc/')
+
+    def test_project_id_may_be_omitted(self):
+        cfg = PlaidConfig(config_path=None, rpc_uri='https://t.plaid.cloud/json-rpc/',
+                          auth_token='tok')
+        assert cfg.all['project_id'] == ''
+        with pytest.raises(Exception, match='Project Id has not been set'):
+            cfg.project_id
+
+    def test_unparseable_rpc_uri_falls_back_to_unknown(self):
+        cfg = PlaidConfig(config_path=None, rpc_uri='not-a-url', auth_token='tok')
+        assert cfg.hostname == 'Unknown'
+
+    def test_ids_without_rpc_uri_raise_rather_than_being_ignored(self, monkeypatch):
+        """Without rpc_uri another source configures the connection, and these would be
+        dropped on the floor."""
+        monkeypatch.setenv('__PLAID_RPC_URI__', 'https://t.plaid.cloud/json-rpc/')
+        monkeypatch.setenv('__PLAID_RPC_AUTH_TOKEN__', 'tok')
+        monkeypatch.setenv('__PLAID_PROJECT_ID__', 'env-pid')
+        monkeypatch.setenv('__PLAID_WORKSPACE_UUID__', 'env-ws')
+        monkeypatch.setenv('__PLAID_WORKFLOW_ID__', 'wf')
+        monkeypatch.setenv('__PLAID_STEP_ID__', 'st')
+        with pytest.raises(ValueError, match='require rpc_uri'):
+            PlaidConfig(config_path=None, project_id='ignored-otherwise')
+        with pytest.raises(ValueError, match='require rpc_uri'):
+            PlaidConfig(config_path=None, workspace_uuid='ignored-otherwise')
+
+    def test_token_provider_applies_to_environment_config(self, monkeypatch):
+        """The server Panel case: context from the environment, token per viewer session."""
+        monkeypatch.setenv('__PLAID_RPC_URI__', 'https://t.plaid.cloud/json-rpc/')
+        monkeypatch.setenv('__PLAID_RPC_AUTH_TOKEN__', 'placeholder')
+        monkeypatch.setenv('__PLAID_PROJECT_ID__', 'pid')
+        monkeypatch.setenv('__PLAID_WORKSPACE_UUID__', 'ws')
+        monkeypatch.setenv('__PLAID_WORKFLOW_ID__', 'wf')
+        monkeypatch.setenv('__PLAID_STEP_ID__', 'st')
+
+        def provider():
+            return 'per-session'
+
+        cfg = PlaidConfig(config_path=None, token_provider=provider)
+        assert cfg.token_provider is provider
+        assert cfg.is_local is False
+
+
+class TestPlaidConfigInstanceIsolation:
+    """_C used to be a single class-level dict shared by every instance."""
+
+    def test_underscore_c_is_not_shared_between_instances(self):
+        first = PlaidConfig(config_path=None, rpc_uri='https://a.example.com/json-rpc/',
+                            auth_token='tok', project_id='a-project')
+        second = PlaidConfig(config_path=None, rpc_uri='https://b.example.com/json-rpc/',
+                             auth_token='tok', project_id='b-project')
+        first.all['leaked'] = True
+        assert 'leaked' not in second.all
+        assert second.all['project_id'] == 'b-project'
+
+    def test_plaidxl_config_also_gets_its_own_dict(self):
+        """PlaidXLConfig returns through the config_path is False branch, so the rebind
+        has to happen before it."""
+        first = PlaidXLConfig(rpc_uri='https://a.example.com/json-rpc/', auth_token='t',
+                              workspace_id='ws', project_id='p')
+        second = PlaidXLConfig(rpc_uri='https://b.example.com/json-rpc/', auth_token='t',
+                               workspace_id='ws', project_id='p')
+        first.all['leaked'] = True
+        assert 'leaked' not in second.all
+
+
 class TestPlaidConfigEnvironment:
     """Tests the environment variable path in PlaidConfig initialization."""
 

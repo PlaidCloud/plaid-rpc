@@ -196,6 +196,7 @@ class PlaidConfig:
     # Members for local and remote
     rpc_uri = ''
     auth_token = ''
+    token_provider = None
     _project_id = ''
     _workflow_id = ''
     _step_id = ''
@@ -219,7 +220,8 @@ class PlaidConfig:
     cache_locally = False
     write_from_local = False
 
-    def __init__(self, config_path: [str, False], working_user=''):
+    def __init__(self, config_path: [str, False], working_user='', *, rpc_uri='', auth_token='',
+                 token_provider=None, workspace_uuid='', project_id=''):
         """
         Configuration for running UDFs within Plaid
 
@@ -227,10 +229,37 @@ class PlaidConfig:
         that can be deployed on a Windows server and then be reliably called.  Enables common usage of shared
         files, regardless of who the local user happens to be.  This was essential for deploying KC reporting.
 
+        Configuration comes from one of three sources: the arguments here, environment
+        variables, or a plaid.conf on disk, in that order of preference. Passing rpc_uri
+        selects the arguments and skips the other two entirely, which is the only option in
+        an environment that has neither env vars nor a readable filesystem. token_provider is
+        the exception: it says how to obtain a token rather than what the configuration is, so
+        it applies whichever source supplied the rest.
+
         Args:
             config_path (str):  client repo's config directory.  It's where to look for client-specific config yaml.
             working_user (str, optional): local user or overridden (typically 'plaidlink') user. defaults to os.path.expanduser('~')
+            rpc_uri (str, optional): full RPC endpoint, e.g. 'https://tenant.plaid.cloud/json-rpc/'. Selects direct configuration.
+            auth_token (str, optional): a bearer token. Required with rpc_uri unless token_provider is given.
+            token_provider (callable, optional): returns a bearer token, called per request. Use where the
+                token varies over the life of the connection (per-viewer sessions, refresh ahead of expiry).
+                Takes precedence over auth_token, from any configuration source.
+            workspace_uuid (str, optional): workspace/tenant id. Requires rpc_uri.
+            project_id (str, optional): project id. Requires rpc_uri. Callers that never name a project
+                may omit it; the project_id property still raises if something later needs one.
+
+        Raises:
+            ValueError: if rpc_uri is given without a token or provider, or if workspace_uuid or
+                project_id is given without rpc_uri (they would otherwise be silently ignored).
         """
+        # _C is declared at class level, so every instance shared one dict and config built
+        # in one place leaked into every other instance in the process. Rebind per instance
+        # before anything can write to it, including the PlaidXLConfig path that returns early.
+        self._C = {}
+        # Set regardless of which source configures the rest: a caller may take its context
+        # from the environment and still need to supply the token itself, per request.
+        self.token_provider = token_provider
+
         def _check_environment_variables():
             try:
                 # If this is running in UDF or Jupyter notebook then an RPC connection is already available
@@ -257,11 +286,23 @@ class PlaidConfig:
                 logger.debug("Environment not configured, running UDF Locally. Checking local configuration.")
                 return False
 
+        def _init_direct_params():
+            if not (auth_token or token_provider):
+                raise ValueError('rpc_uri requires either auth_token or token_provider.')
+            self.rpc_uri = rpc_uri
+            self.auth_token = auth_token
+            self.workspace_uuid = workspace_uuid
+            self._project_id = project_id
+            self.hostname = urlparse(rpc_uri).netloc or 'Unknown'
+
         def _init_plaidcloud_config():
             self.is_local = False
             self.debug = False
             self._C['LOCAL_STORAGE'] = None
-            self._C['project_id'] = self.project_id
+            # _project_id, not the project_id property: the property raises when unset, and a
+            # caller that never names a project is legitimate. It still raises at the point
+            # something actually needs a project.
+            self._C['project_id'] = self._project_id
             self._C['return_df'] = True
             self.fetch = True
             self.cache_locally = False
@@ -392,7 +433,13 @@ class PlaidConfig:
         if config_path is False: # allow to call super from PlaidXLConfig without effect
             return
 
-        if _check_environment_variables():
+        if not rpc_uri and (workspace_uuid or project_id):
+            raise ValueError('workspace_uuid and project_id require rpc_uri.')
+
+        if rpc_uri:
+            _init_direct_params()
+            _init_plaidcloud_config()
+        elif _check_environment_variables():
             _init_plaidcloud_config()
         else:
             _init_local_config()
