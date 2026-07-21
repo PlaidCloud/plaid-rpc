@@ -385,6 +385,36 @@ class TestPlaidJSONDialect:
     def test_databricks_emits_variant(self):
         assert PlaidJSON().compile(dialect=DatabricksDialect()) == 'VARIANT'
 
+    @pytest.mark.skipif(SnowflakeDialect is None, reason="snowflake-sqlalchemy not installed")
+    def test_snowflake_variant_json_round_trip(self):
+        import sqlalchemy as sa
+        dialect = SnowflakeDialect()
+        impl = PlaidJSON().load_dialect_impl(dialect)
+        bind = impl.bind_processor(dialect)
+        assert bind({'a': [1, 'b']}) == '{"a":[1,"b"]}'
+        assert bind(None) is None
+        result = impl.result_processor(dialect, None)
+        assert result('{"a": [1, "b"]}') == {'a': [1, 'b']}
+        assert result(None) is None
+        table = sa.Table('t', sa.MetaData(), sa.Column('j', PlaidJSON()))
+        compiled = str(table.insert().values(j={'a': 1}).compile(dialect=dialect))
+        assert 'PARSE_JSON' in compiled
+
+    @pytest.mark.skipif(DatabricksDialect is None, reason="databricks-sqlalchemy not installed")
+    def test_databricks_variant_json_round_trip(self):
+        import sqlalchemy as sa
+        dialect = DatabricksDialect()
+        impl = PlaidJSON().load_dialect_impl(dialect)
+        bind = impl.bind_processor(dialect)
+        assert bind({'a': [1, 'b']}) == '{"a":[1,"b"]}'
+        assert bind(None) is None
+        result = impl.result_processor(dialect, None)
+        assert result('{"a": [1, "b"]}') == {'a': [1, 'b']}
+        assert result(None) is None
+        table = sa.Table('t', sa.MetaData(), sa.Column('j', PlaidJSON()))
+        compiled = str(table.insert().values(j={'a': 1}).compile(dialect=dialect))
+        assert 'PARSE_JSON' in compiled
+
 
 class TestPlaidTinyIntDialect:
 

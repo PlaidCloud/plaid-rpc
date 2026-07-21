@@ -6,6 +6,7 @@ Utility functions for interacting with the database.
 """
 import errno
 import getpass
+import json
 import logging
 import os
 import threading
@@ -247,6 +248,9 @@ class PlaidUnicode(TypeDecorator):
         if is_dialect_databend_based(dialect):  # pragma: no cover - requires databend
             return dialect.type_descriptor(VARCHAR)
         if is_dialect_snowflake_based(dialect):
+            # Length dropped deliberately (mirrors the databend branch): bare VARCHAR = 16MB max, while a
+            # declared length is enforced with truncation errors on Snowflake. Metadata readers see the
+            # reflected length change (255 -> 16777216)
             return dialect.type_descriptor(VARCHAR)
         if is_dialect_databricks_based(dialect):  # pragma: no cover - requires databricks
             # No NVARCHAR on Databricks, and bare VARCHAR (no length) is invalid; STRING is the unbounded type
@@ -323,14 +327,49 @@ class PlaidJSON(TypeDecorator):
         if is_dialect_postgresql_based(dialect):
             return dialect.type_descriptor(JSONB)
         if is_dialect_snowflake_based(dialect):
-            # snowflake-sqlalchemy can't compile the generic JSON type; VARIANT is its semi-structured type
+            # snowflake-sqlalchemy can't compile the generic JSON type, and its VARIANT is a bare
+            # TypeEngine — binding a dict raises ProgrammingError 255001. Mirror DatabricksVariant:
+            # serialize binds to a JSON string wrapped in PARSE_JSON, parse reads back to objects
             from snowflake.sqlalchemy import VARIANT
-            return dialect.type_descriptor(VARIANT)
+
+            class JSONVariant(VARIANT):
+                cache_ok = True
+
+                def bind_processor(self, dialect):
+                    def process(value):
+                        if value is None:
+                            return None
+                        return json.dumps(value, ensure_ascii=False, separators=(',', ':'))
+                    return process
+
+                def bind_expression(self, bindvalue):
+                    return sqlalchemy.func.PARSE_JSON(bindvalue)
+
+                def result_processor(self, dialect, coltype):
+                    def process(value):
+                        if value is None:
+                            return None
+                        return json.loads(value)
+                    return process
+
+            return dialect.type_descriptor(JSONVariant)
         if is_dialect_databricks_based(dialect):  # pragma: no cover - requires databricks
             # databricks-sqlalchemy can't compile the generic JSON type; DatabricksVariant renders VARIANT
-            # and binds via json.dumps + PARSE_JSON (requires DBR 15.3+, satisfied by serverless warehouses)
+            # and binds via json.dumps + PARSE_JSON (requires DBR 15.3+, satisfied by serverless
+            # warehouses), but reads come back as JSON strings — parse them for parity with JSONB
             from databricks.sqlalchemy import DatabricksVariant
-            return dialect.type_descriptor(DatabricksVariant)
+
+            class JSONVariant(DatabricksVariant):
+                cache_ok = True
+
+                def result_processor(self, dialect, coltype):
+                    def process(value):
+                        if value is None:
+                            return None
+                        return json.loads(value)
+                    return process
+
+            return dialect.type_descriptor(JSONVariant)
 
         return self.impl
 
