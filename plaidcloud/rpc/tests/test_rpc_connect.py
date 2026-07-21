@@ -25,6 +25,56 @@ class TestPlaidXLConnect:
         assert rpc.project_id == 'p1'
 
 
+class TestConnectDirectParams:
+    """Connect forwards direct configuration through to PlaidConfig, so a caller holding
+    the values needs neither environment variables nor a plaid.conf."""
+
+    @mock.patch('plaidcloud.rpc.rpc_connect.SimpleRPC.__init__')
+    def test_connects_without_env_or_file(self, mock_srpc_init, monkeypatch, tmp_path):
+        mock_srpc_init.return_value = None
+        monkeypatch.delenv('__PLAID_RPC_URI__', raising=False)
+        monkeypatch.delenv('__PLAID_RPC_AUTH_TOKEN__', raising=False)
+        monkeypatch.chdir(tmp_path)
+        connect = Connect(rpc_uri='https://t.plaid.cloud/json-rpc/', auth_token='tok',
+                          workspace_uuid='ws', project_id='pid')
+        assert connect.is_local is False
+        assert connect.project_id == 'pid'
+        mock_srpc_init.assert_called_once()
+        assert mock_srpc_init.call_args.args[1] == 'tok'
+
+    @mock.patch('plaidcloud.rpc.rpc_connect.SimpleRPC.__init__')
+    def test_ready_passes_the_provider_itself_not_its_result(self, mock_srpc_init):
+        """SimpleRPC resolves a callable per request; handing it the result once would
+        pin every request to the token that happened to be current at connect time."""
+        mock_srpc_init.return_value = None
+
+        def provider():
+            return 'fresh-token'
+
+        connect = Connect.__new__(Connect)
+        connect.auth_token = ''
+        connect.token_provider = provider
+        connect.rpc_uri = 'https://example.com'
+        connect.allow_transmit_func = lambda: True
+        connect.ready()
+        assert mock_srpc_init.call_args.args[1] is provider
+
+    @mock.patch('plaidcloud.rpc.rpc_connect.SimpleRPC.__init__')
+    def test_provider_wins_over_a_static_token(self, mock_srpc_init):
+        mock_srpc_init.return_value = None
+
+        def provider():
+            return 'fresh-token'
+
+        connect = Connect.__new__(Connect)
+        connect.auth_token = 'static'
+        connect.token_provider = provider
+        connect.rpc_uri = 'https://example.com'
+        connect.allow_transmit_func = lambda: True
+        connect.ready()
+        assert mock_srpc_init.call_args.args[1] is provider
+
+
 class TestConnect:
     """Connect inherits from PlaidConfig which reads env/files.
     Tests exercise only pieces that don't require a fully-wired environment."""

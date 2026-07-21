@@ -32,7 +32,9 @@ class Connect(PlaidConfig, SimpleRPC):
         [{'SELECT 1': 1}]
     """
 
-    def __init__(self, config_path=None, callable_listener=listener, auto_initialize=True, check_allow_transmit=lambda: True):
+    def __init__(self, config_path=None, callable_listener=listener, auto_initialize=True,
+                 check_allow_transmit=lambda: True, *, rpc_uri='', auth_token='',
+                 token_provider=None, workspace_uuid='', project_id=''):
         """Sets up initial data
 
         Args:
@@ -44,6 +46,9 @@ class Connect(PlaidConfig, SimpleRPC):
                 it must be called manually
             allow_transmit (func): Function to be called before making RPC calls to see if the call should actually
                 be made. It must take no args and return a boolean value.
+            rpc_uri, auth_token, token_provider, workspace_uuid, project_id: see PlaidConfig.
+                Passing rpc_uri configures the connection from these values alone, with no
+                environment variables and no plaid.conf.
         """
 
         self.callable_listener = callable_listener
@@ -52,7 +57,10 @@ class Connect(PlaidConfig, SimpleRPC):
         # it will find (and try to call) a `Namespace` object and fail. Not sure when this behavior was introduced, but
         # ensuring that we pass a function (not None) corrects this behavior.
         self.allow_transmit_func = check_allow_transmit
-        PlaidConfig.__init__(self, config_path=config_path)
+        PlaidConfig.__init__(
+            self, config_path=config_path, rpc_uri=rpc_uri, auth_token=auth_token,
+            token_provider=token_provider, workspace_uuid=workspace_uuid, project_id=project_id,
+        )
         if not self.is_local:
             self.ready()
         elif self.is_local and auto_initialize:
@@ -147,7 +155,10 @@ class Connect(PlaidConfig, SimpleRPC):
 
     def ready(self):
         """Call SimpleRPC __init__ once we have an auth token"""
-        SimpleRPC.__init__(self, self.auth_token, uri=self.rpc_uri, check_allow_transmit=self.allow_transmit_func)
+        # SimpleRPC resolves a callable per request, so a token_provider gives each request a
+        # fresh token rather than one captured at connection time.
+        SimpleRPC.__init__(self, self.token_provider or self.auth_token, uri=self.rpc_uri,
+                           check_allow_transmit=self.allow_transmit_func)
 
 
 class PlaidXLConnect(SimpleRPC, PlaidXLConfig):
