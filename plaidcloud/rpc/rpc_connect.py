@@ -34,7 +34,7 @@ class Connect(PlaidConfig, SimpleRPC):
 
     def __init__(self, config_path=None, callable_listener=listener, auto_initialize=True,
                  check_allow_transmit=lambda: True, *, rpc_uri='', auth_token='',
-                 token_provider=None, workspace_uuid='', project_id=''):
+                 token_provider=None, workspace_uuid='', project_id='', verify_ssl=None):
         """Sets up initial data
 
         Args:
@@ -46,9 +46,9 @@ class Connect(PlaidConfig, SimpleRPC):
                 it must be called manually
             allow_transmit (func): Function to be called before making RPC calls to see if the call should actually
                 be made. It must take no args and return a boolean value.
-            rpc_uri, auth_token, token_provider, workspace_uuid, project_id: see PlaidConfig.
-                Passing rpc_uri configures the connection from these values alone, with no
-                environment variables and no plaid.conf.
+            rpc_uri, auth_token, token_provider, workspace_uuid, project_id, verify_ssl: see
+                PlaidConfig. Passing rpc_uri configures the connection from these values alone,
+                with no environment variables and no plaid.conf.
         """
 
         self.callable_listener = callable_listener
@@ -60,6 +60,7 @@ class Connect(PlaidConfig, SimpleRPC):
         PlaidConfig.__init__(
             self, config_path=config_path, rpc_uri=rpc_uri, auth_token=auth_token,
             token_provider=token_provider, workspace_uuid=workspace_uuid, project_id=project_id,
+            verify_ssl=verify_ssl,
         )
         if not self.is_local:
             self.ready()
@@ -157,7 +158,12 @@ class Connect(PlaidConfig, SimpleRPC):
         """Call SimpleRPC __init__ once we have an auth token"""
         # SimpleRPC resolves a callable per request, so a token_provider gives each request a
         # fresh token rather than one captured at connection time.
+        # self.verify_ssl reads PlaidConfig's value, not SimpleRPC's same-named property:
+        # PlaidConfig precedes SimpleRPC in this class's MRO and holds a plain class attribute,
+        # which an instance attribute shadows. Without this argument SimpleRPC coerced its own
+        # None default to False and disabled certificate verification on every call (sc-23168).
         SimpleRPC.__init__(self, self.token_provider or self.auth_token, uri=self.rpc_uri,
+                           verify_ssl=self.verify_ssl,
                            check_allow_transmit=self.allow_transmit_func)
 
 
@@ -172,6 +178,10 @@ class PlaidXLConnect(SimpleRPC, PlaidXLConfig):
         [{'SELECT 1': 1}]
     """
 
-    def __init__(self, *, rpc_uri: str, auth_token: str, workspace_id: str = '', project_id: str = ''):
-        PlaidXLConfig.__init__(self, rpc_uri=rpc_uri, auth_token=auth_token, workspace_id=workspace_id, project_id=project_id)
-        SimpleRPC.__init__(self, self.auth_token, uri=self.rpc_uri)
+    def __init__(self, *, rpc_uri: str, auth_token: str, workspace_id: str = '', project_id: str = '',
+                 verify_ssl: bool = False):
+        PlaidXLConfig.__init__(self, rpc_uri=rpc_uri, auth_token=auth_token, workspace_id=workspace_id,
+                               project_id=project_id)
+        # Defaults to False: PlaidXL installs already in the field have been running unverified,
+        # because SimpleRPC coerced its own None default to False (sc-23168).
+        SimpleRPC.__init__(self, self.auth_token, uri=self.rpc_uri, verify_ssl=verify_ssl)

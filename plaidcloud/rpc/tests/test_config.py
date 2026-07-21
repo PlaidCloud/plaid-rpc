@@ -312,6 +312,68 @@ class TestPlaidConfigEnvironment:
         assert cfg.verify_ssl is False
 
 
+class TestVerifySslResolution:
+    """verify_ssl is an option defaulting to True, but the two configuration sources that
+    predate it reaching the transport resolve to False so that honouring it changes nothing
+    for anything already deployed (sc-23168)."""
+
+    ENV = {
+        '__PLAID_RPC_URI__': 'https://rpc.example.com',
+        '__PLAID_RPC_AUTH_TOKEN__': 'tok',
+        '__PLAID_PROJECT_ID__': 'pid',
+        '__PLAID_WORKSPACE_UUID__': 'wsid',
+        '__PLAID_WORKFLOW_ID__': 'wfid',
+        '__PLAID_STEP_ID__': 'sid',
+    }
+
+    def _set_env(self, monkeypatch):
+        for key, value in self.ENV.items():
+            monkeypatch.setenv(key, value)
+        monkeypatch.delenv('__PLAID_VERIFY_SSL__', raising=False)
+
+    def test_environment_without_the_variable_does_not_verify(self, monkeypatch):
+        self._set_env(monkeypatch)
+        assert PlaidConfig(config_path=None).verify_ssl is False
+
+    def test_environment_variable_true_verifies(self, monkeypatch):
+        self._set_env(monkeypatch)
+        monkeypatch.setenv('__PLAID_VERIFY_SSL__', 'True')
+        assert PlaidConfig(config_path=None).verify_ssl is True
+
+    def test_argument_overrides_the_environment(self, monkeypatch):
+        self._set_env(monkeypatch)
+        monkeypatch.setenv('__PLAID_VERIFY_SSL__', 'True')
+        assert PlaidConfig(config_path=None, verify_ssl=False).verify_ssl is False
+
+    def test_direct_arguments_verify_by_default(self):
+        cfg = PlaidConfig(config_path=None, rpc_uri='https://t.plaid.cloud/json-rpc/',
+                          auth_token='tok')
+        assert cfg.verify_ssl is True
+
+    def test_direct_arguments_accept_an_explicit_false(self):
+        cfg = PlaidConfig(config_path=None, rpc_uri='https://t.plaid.cloud/json-rpc/',
+                          auth_token='tok', verify_ssl=False)
+        assert cfg.verify_ssl is False
+
+    def test_plaid_conf_without_the_key_does_not_verify(self):
+        cfg = PlaidConfig(config_path='plaidcloud/rpc/tests/.plaid/plaid.conf')
+        assert cfg.verify_ssl is False
+
+    def test_plaid_conf_key_is_honoured(self, tmp_path):
+        conf = tmp_path / 'plaid.conf'
+        conf.write_text(
+            'user_id: 1\n'
+            'client_id: c\n'
+            'client_secret: s\n'
+            'hostname: h\n'
+            'realm: r\n'
+            'workspace_uuid: ws\n'
+            'verify_ssl: true\n'
+        )
+        assert PlaidConfig(config_path=str(conf)).verify_ssl is True
+
+
+
 class TestInitializeAndScaffolding:
     """Test the module-level initialize/setup_scaffolding functions."""
 
