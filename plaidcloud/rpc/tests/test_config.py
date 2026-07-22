@@ -313,8 +313,13 @@ class TestPlaidConfigEnvironment:
 
 
 class TestVerifySslResolution:
-    """verify_ssl defaults to True from every source (sc-23168). A deployment that must not
-    verify — one addressing an internal or self-signed endpoint — says so explicitly."""
+    """verify_ssl's default depends on how the connection was configured (sc-23168).
+
+    Configuring from arguments — an API new in 1.11.0 with no deployed callers — defaults to
+    verifying. The two pre-existing sources, __PLAID_VERIFY_SSL__ and the plaid.conf key,
+    default to NOT verifying, because every connection configured that way predates verify_ssl
+    reaching the transport and has always run unverified. Flipping those on upgrade would break
+    any endpoint presenting an internal or self-signed certificate."""
 
     ENV = {
         '__PLAID_RPC_URI__': 'https://rpc.example.com',
@@ -330,8 +335,14 @@ class TestVerifySslResolution:
             monkeypatch.setenv(key, value)
         monkeypatch.delenv('__PLAID_VERIFY_SSL__', raising=False)
 
-    def test_environment_without_the_variable_verifies(self, monkeypatch):
+    def test_environment_without_the_variable_does_not_verify(self, monkeypatch):
+        """An existing deployment: it has been running unverified and must keep doing so."""
         self._set_env(monkeypatch)
+        assert PlaidConfig(config_path=None).verify_ssl is False
+
+    def test_environment_variable_true_opts_in(self, monkeypatch):
+        self._set_env(monkeypatch)
+        monkeypatch.setenv('__PLAID_VERIFY_SSL__', 'True')
         assert PlaidConfig(config_path=None).verify_ssl is True
 
     def test_environment_variable_false_opts_out(self, monkeypatch):
@@ -355,9 +366,10 @@ class TestVerifySslResolution:
                           auth_token='tok', verify_ssl=False)
         assert cfg.verify_ssl is False
 
-    def test_plaid_conf_without_the_key_verifies(self):
+    def test_plaid_conf_without_the_key_does_not_verify(self):
+        """Every plaid.conf in existence predates this key."""
         cfg = PlaidConfig(config_path='plaidcloud/rpc/tests/.plaid/plaid.conf')
-        assert cfg.verify_ssl is True
+        assert cfg.verify_ssl is False
 
     def test_plaid_conf_key_opts_out(self, tmp_path):
         conf = tmp_path / 'plaid.conf'

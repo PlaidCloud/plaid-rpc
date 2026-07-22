@@ -247,12 +247,20 @@ class PlaidConfig:
             workspace_uuid (str, optional): workspace/tenant id. Requires rpc_uri.
             project_id (str, optional): project id. Requires rpc_uri. Callers that never name a project
                 may omit it; the project_id property still raises if something later needs one.
-            verify_ssl (bool, optional): verify the RPC server's TLS certificate. Defaults to True,
-                as do both configuration sources — the __PLAID_VERIFY_SSL__ environment variable
-                and the plaid.conf verify_ssl key. Overrides whichever source configured the rest.
-                Until sc-23168 this never reached the transport, so a deployment that has been
-                running unverified against an internal or self-signed endpoint must now say so
-                explicitly, by setting __PLAID_VERIFY_SSL__='False' or verify_ssl: false.
+            verify_ssl (bool, optional): verify the RPC server's TLS certificate. An explicit value
+                always wins, over whichever source configured the rest. Left unset the default
+                depends on how the connection was configured, and deliberately so:
+
+                  * configuring from these arguments (passing rpc_uri) defaults to True — that
+                    API is new in 1.11.0, so no deployed caller can be relying on it being off;
+                  * the two pre-existing sources, __PLAID_VERIFY_SSL__ and the plaid.conf
+                    verify_ssl key, default to False.
+
+                The asymmetry exists because until sc-23168 verify_ssl never reached the
+                transport at all: every already-deployed connection has been running unverified,
+                and defaulting those to True would silently change their behaviour on upgrade,
+                breaking any endpoint presenting an internal or self-signed certificate. New
+                connections are secure by default; existing ones opt in deliberately.
 
         Raises:
             ValueError: if rpc_uri is given without a token or provider, or if workspace_uuid or
@@ -280,7 +288,7 @@ class PlaidConfig:
                 # Absent means verify. An environment that must not verify has to say so —
                 # every deployed one already does (JupyterHub sets it, and workflow-runner
                 # propagates it into each UDF's environment).
-                self.verify_ssl = os.environ.get('__PLAID_VERIFY_SSL__', 'True') == 'True'
+                self.verify_ssl = os.environ.get('__PLAID_VERIFY_SSL__', 'False') == 'True'
                 self.is_local = False
                 try:
                     self.hostname = urlparse(self.rpc_uri).netloc
@@ -370,10 +378,10 @@ class PlaidConfig:
             self._step_id = self.config.get('step_id', '')
             self.name = self.config.get('name')
             self.grant_type = self.config.get("grant_type", "code")
-            # Absent means verify, matching __PLAID_VERIFY_SSL__. No existing plaid.conf carries
-            # this key, so one pointed at an internal or self-signed endpoint has to add
-            # `verify_ssl: false`. The real ones all address public *.plaid.cloud hostnames.
-            self.verify_ssl = bool(self.config.get('verify_ssl', True))
+            # Absent means do NOT verify. Every plaid.conf in existence predates verify_ssl
+            # reaching the transport, so those connections have always run unverified; making
+            # the key's absence mean "verify" would change their behaviour on upgrade.
+            self.verify_ssl = bool(self.config.get('verify_ssl', False))
 
             # No need for an auth code if we already have a token.
             self.auth_code = self.config.get('auth_code') if not self.auth_token else None
