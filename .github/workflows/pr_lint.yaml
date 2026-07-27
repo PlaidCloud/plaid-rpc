@@ -13,7 +13,7 @@ jobs:
     timeout-minutes: 5
     steps:
       - name: Ensure python ${{ env.PYTHON_VERSION }}
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v7
         with:
           python-version: ${{ env.PYTHON_VERSION }}
       - name: Checkout code
@@ -50,7 +50,7 @@ jobs:
       pull-requests: write
     steps:
       - name: Ensure python ${{ env.PYTHON_VERSION }}
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v7
         with:
           python-version: ${{ env.PYTHON_VERSION }}
       - name: Checkout code
