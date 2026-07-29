@@ -107,7 +107,9 @@ def test_sample_ratio_default_clamp_and_malformed(monkeypatch):
 
 
 def _install_and_capture(service="plaid-rpc-test", org_id=None):
-    with mock.patch.object(telemetry, "_collector_reachable", return_value=True), mock.patch(
+    with mock.patch.object(telemetry, "_collector_reachable", return_value=True), mock.patch.object(
+        telemetry, "_instrument_libraries"
+    ), mock.patch(
         "opentelemetry.exporter.otlp.proto.grpc.trace_exporter.OTLPSpanExporter"
     ) as exporter, mock.patch(
         "opentelemetry.sdk.trace.export.BatchSpanProcessor"
@@ -144,6 +146,35 @@ def test_init_tracing_is_idempotent(monkeypatch):
     assert result is True
     assert not exporter.called
     assert not set_provider.called
+
+
+def test_init_tracing_instruments_db_and_cache_libraries(monkeypatch):
+    monkeypatch.setenv("PLAID_TRACING_ENABLED", "true")
+    monkeypatch.setenv("POD_NAMESPACE", "pw-tartan")
+    with mock.patch.object(telemetry, "_instrument_libraries") as instrument, mock.patch.object(
+        telemetry, "_collector_reachable", return_value=True
+    ), mock.patch(
+        "opentelemetry.exporter.otlp.proto.grpc.trace_exporter.OTLPSpanExporter"
+    ), mock.patch("opentelemetry.sdk.trace.export.BatchSpanProcessor"), mock.patch(
+        "opentelemetry.trace.set_tracer_provider"
+    ):
+        telemetry.init_tracing("svc")
+    instrument.assert_called_once()
+
+
+def test_instrument_libraries_tolerates_missing_packages(monkeypatch):
+    """A ``[tracing]`` install without the instrumentation extras must degrade quietly."""
+    import builtins
+
+    real_import = builtins.__import__
+
+    def fake_import(name, *args, **kwargs):
+        if "opentelemetry.instrumentation" in name:
+            raise ImportError(name)
+        return real_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", fake_import)
+    telemetry._instrument_libraries()  # must not raise
 
 
 def test_inject_skipped_when_not_initialized():

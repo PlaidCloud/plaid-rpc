@@ -70,6 +70,8 @@ full = [
 tracing = [
     "opentelemetry-sdk",
     "opentelemetry-exporter-otlp-proto-grpc",
+    "opentelemetry-instrumentation-sqlalchemy",
+    "opentelemetry-instrumentation-redis",
 ]
 
 [project.urls]

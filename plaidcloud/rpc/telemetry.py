@@ -132,8 +132,30 @@ def init_tracing(service_name, org_id=None):
         headers=(("x-scope-orgid", org),),      # gRPC metadata is lowercase
     )))
     trace.set_tracer_provider(provider)
+    _instrument_libraries()
     _initialized = True
     return True
+
+
+def _instrument_libraries():
+    """Auto-instrument the DB and cache clients so their queries/commands nest as child
+    spans under the active RPC span — SQLAlchemy (Databend / Postgres / StarRocks) and
+    Redis. Global (no engine/client argument), so it covers the lazily-built, per-connection
+    engines PlaidCloud creates after startup. Each library is guarded independently and
+    best-effort: a missing optional instrumentation package (an older ``[tracing]`` install)
+    or a one-off ``instrument()`` failure must never break tracing or startup."""
+    try:
+        from opentelemetry.instrumentation.sqlalchemy import SQLAlchemyInstrumentor
+
+        SQLAlchemyInstrumentor().instrument()
+    except Exception:
+        pass
+    try:
+        from opentelemetry.instrumentation.redis import RedisInstrumentor
+
+        RedisInstrumentor().instrument()
+    except Exception:
+        pass
 
 
 def inject_trace_context(carrier):
