@@ -55,7 +55,10 @@ test = [
     "starrocks",
     "snowflake-sqlalchemy",
     "opentelemetry-sdk",
-    "opentelemetry-exporter-otlp-proto-grpc"
+    "opentelemetry-exporter-otlp-proto-grpc",
+    "opentelemetry-instrumentation-sqlalchemy",
+    "opentelemetry-instrumentation-redis",
+    "redis",
 ]
 full = [
     "chardet>=2.3.0",
@@ -70,6 +73,9 @@ full = [
 tracing = [
     "opentelemetry-sdk",
     "opentelemetry-exporter-otlp-proto-grpc",
+    "opentelemetry-instrumentation-sqlalchemy",
+    "opentelemetry-instrumentation-redis",
+    "redis",
 ]
 
 [project.urls]

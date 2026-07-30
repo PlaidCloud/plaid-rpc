@@ -1,11 +1,14 @@
 #!/usr/bin/env python
 # coding=utf-8
 
+import importlib
 from unittest import mock
 
 import pytest
 from opentelemetry import trace
 from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.sdk.trace.export import SimpleSpanProcessor
+from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
 from opentelemetry.sdk.trace.sampling import ALWAYS_ON
 
 from plaidcloud.rpc import telemetry
@@ -107,8 +110,10 @@ def test_sample_ratio_default_clamp_and_malformed(monkeypatch):
 
 
 def _install_and_capture(service="plaid-rpc-test", org_id=None):
-    with mock.patch.object(telemetry, "_collector_reachable", return_value=True), mock.patch(
-        "opentelemetry.exporter.otlp.proto.grpc.trace_exporter.OTLPSpanExporter"
+    with mock.patch.object(telemetry, "_collector_reachable", return_value=True), mock.patch.object(
+        telemetry, "_instrument_libraries"
+    ), mock.patch(
+        "plaidcloud.rpc.telemetry._otlp_span_exporter"
     ) as exporter, mock.patch(
         "opentelemetry.sdk.trace.export.BatchSpanProcessor"
     ), mock.patch("opentelemetry.trace.set_tracer_provider") as set_provider:
@@ -144,6 +149,86 @@ def test_init_tracing_is_idempotent(monkeypatch):
     assert result is True
     assert not exporter.called
     assert not set_provider.called
+
+
+def test_init_tracing_instruments_db_and_cache_libraries(monkeypatch):
+    monkeypatch.setenv("PLAID_TRACING_ENABLED", "true")
+    monkeypatch.setenv("POD_NAMESPACE", "pw-tartan")
+    with mock.patch.object(telemetry, "_instrument_libraries") as instrument, mock.patch.object(
+        telemetry, "_collector_reachable", return_value=True
+    ), mock.patch(
+        "plaidcloud.rpc.telemetry._otlp_span_exporter"
+    ), mock.patch("opentelemetry.sdk.trace.export.BatchSpanProcessor"), mock.patch(
+        "opentelemetry.trace.set_tracer_provider"
+    ):
+        telemetry.init_tracing("svc")
+    instrument.assert_called_once()
+
+
+def test_instrument_libraries_tolerates_missing_packages(monkeypatch):
+    """A ``[tracing]`` install without the instrumentation extras must degrade quietly."""
+    import builtins
+
+    real_import = builtins.__import__
+
+    def fake_import(name, *args, **kwargs):
+        if "opentelemetry.instrumentation" in name:
+            raise ImportError(name)
+        return real_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", fake_import)
+    telemetry._instrument_libraries()  # must not raise
+
+
+def test_otlp_exporter_drops_query_text():
+    memory = InMemorySpanExporter()
+    provider = TracerProvider()
+    provider.add_span_processor(SimpleSpanProcessor(memory))
+    with provider.get_tracer("test").start_as_current_span("query") as span:
+        span.set_attribute("db.statement", "select 'customer@example.com'")
+        span.set_attribute("db.query.text", "select 'customer@example.com'")
+        span.set_attribute("db.system", "postgresql")
+    request = telemetry._otlp_span_exporter(
+        endpoint="unused:4317", insecure=True
+    )._translate_data(memory.get_finished_spans())
+    attributes = [
+        attribute.key
+        for resource_spans in request.resource_spans
+        for scope_spans in resource_spans.scope_spans
+        for span in scope_spans.spans
+        for attribute in span.attributes
+    ]
+    assert attributes == ["db.system"]
+
+
+def test_instrument_libraries_instruments_sqlalchemy_and_redis():
+    importlib.import_module("opentelemetry.instrumentation.redis")
+    importlib.import_module("opentelemetry.instrumentation.sqlalchemy")
+    with mock.patch(
+        "opentelemetry.instrumentation.sqlalchemy.SQLAlchemyInstrumentor"
+    ) as sqlalchemy_instrumentor, mock.patch(
+        "opentelemetry.instrumentation.redis.RedisInstrumentor"
+    ) as redis_instrumentor:
+        telemetry._instrument_libraries()
+    sqlalchemy_instrumentor.return_value.instrument.assert_called_once_with()
+    redis_instrumentor.return_value.instrument.assert_called_once_with()
+
+
+def test_instrument_libraries_logs_instrumentor_errors():
+    importlib.import_module("opentelemetry.instrumentation.redis")
+    importlib.import_module("opentelemetry.instrumentation.sqlalchemy")
+    with mock.patch(
+        "opentelemetry.instrumentation.sqlalchemy.SQLAlchemyInstrumentor"
+    ) as sqlalchemy_instrumentor, mock.patch(
+        "opentelemetry.instrumentation.redis.RedisInstrumentor"
+    ) as redis_instrumentor, mock.patch.object(telemetry._logger, "exception") as log_exception:
+        sqlalchemy_instrumentor.return_value.instrument.side_effect = RuntimeError("nope")
+        redis_instrumentor.return_value.instrument.side_effect = RuntimeError("nope")
+        telemetry._instrument_libraries()
+    log_exception.assert_has_calls([
+        mock.call("Could not initialize SQLAlchemy OpenTelemetry instrumentation"),
+        mock.call("Could not initialize Redis OpenTelemetry instrumentation"),
+    ])
 
 
 def test_inject_skipped_when_not_initialized():

@@ -12,6 +12,7 @@ stays cleanly off (no failing exporter) where Tempo isn't deployed. Set
 no effect until ``init_tracing`` is called.
 """
 
+import logging
 import os
 import socket
 
@@ -21,6 +22,7 @@ _DEFAULT_ENDPOINT = "tempo-distributor.cluster-components.svc:4317"
 
 _initialized = False
 _tracing_on = None  # cached tracing_enabled() result (flag ∧ collector reachable)
+_logger = logging.getLogger(__name__)
 
 
 def _pod_namespace():
@@ -88,6 +90,28 @@ def _sample_ratio():
     return min(1.0, max(0.0, ratio))
 
 
+def _otlp_span_exporter(**kwargs):
+    from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
+
+    class SanitizingOTLPSpanExporter(OTLPSpanExporter):
+        """Keep raw query text inside the process."""
+
+        def _translate_data(self, data):
+            request = super()._translate_data(data)
+            for resource_spans in request.resource_spans:
+                for scope_spans in resource_spans.scope_spans:
+                    for span in scope_spans.spans:
+                        attributes = [
+                            attribute for attribute in span.attributes
+                            if attribute.key not in {"db.statement", "db.query.text"}
+                        ]
+                        span.ClearField("attributes")
+                        span.attributes.extend(attributes)
+            return request
+
+    return SanitizingOTLPSpanExporter(**kwargs)
+
+
 def init_tracing(service_name, org_id=None):
     """Install a global TracerProvider exporting to Tempo over OTLP gRPC.
 
@@ -112,7 +136,6 @@ def init_tracing(service_name, org_id=None):
     from opentelemetry.sdk.trace import TracerProvider
     from opentelemetry.sdk.trace.sampling import ParentBased, TraceIdRatioBased
     from opentelemetry.sdk.trace.export import BatchSpanProcessor
-    from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
 
     org = org_id or telemetry_org_id()
     endpoint = _endpoint()
@@ -126,14 +149,50 @@ def init_tracing(service_name, org_id=None):
         }),
         sampler=ParentBased(TraceIdRatioBased(ratio)),
     )
-    provider.add_span_processor(BatchSpanProcessor(OTLPSpanExporter(
+    provider.add_span_processor(BatchSpanProcessor(_otlp_span_exporter(
         endpoint=endpoint,
         insecure=True,                          # in-cluster, no TLS
         headers=(("x-scope-orgid", org),),      # gRPC metadata is lowercase
     )))
     trace.set_tracer_provider(provider)
+    _instrument_libraries()
     _initialized = True
     return True
+
+
+def _instrument_libraries():
+    """Best-effort global instrumentation of DB/cache clients at startup.
+
+    - **Redis** is fully covered: RedisInstrumentor patches ``Redis.execute_command`` on
+      the class, so every caller is instrumented regardless of import style.
+    - **SQLAlchemy**'s global patch replaces the ``sqlalchemy.create_engine`` *module
+      attribute*, so it reaches call sites that resolve it at call time
+      (``import sqlalchemy; sqlalchemy.create_engine(...)``) — the form engine factories
+      should use. Call sites that bound the name at import time
+      (``from sqlalchemy import create_engine``) keep the original, unpatched function and
+      are not instrumented; switch those to the module-attribute form. (Per-engine
+      ``instrument(engine=...)`` is not a workaround: the instrumentor is a process-wide
+      singleton whose one-shot latch is tripped by this global call, so later per-engine
+      calls no-op.)
+
+    Each library is guarded independently: a missing optional extra (an older
+    ``[tracing]`` install) or a failed ``instrument()`` must never break tracing/startup."""
+    try:
+        from opentelemetry.instrumentation.sqlalchemy import SQLAlchemyInstrumentor
+
+        SQLAlchemyInstrumentor().instrument()
+    except ImportError:
+        _logger.debug("SQLAlchemy OpenTelemetry instrumentation is unavailable")
+    except Exception:
+        _logger.exception("Could not initialize SQLAlchemy OpenTelemetry instrumentation")
+    try:
+        from opentelemetry.instrumentation.redis import RedisInstrumentor
+
+        RedisInstrumentor().instrument()
+    except ImportError:
+        _logger.debug("Redis OpenTelemetry instrumentation is unavailable")
+    except Exception:
+        _logger.exception("Could not initialize Redis OpenTelemetry instrumentation")
 
 
 def inject_trace_context(carrier):
