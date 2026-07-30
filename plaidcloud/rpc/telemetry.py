@@ -138,12 +138,20 @@ def init_tracing(service_name, org_id=None):
 
 
 def _instrument_libraries():
-    """Auto-instrument the DB and cache clients so their queries/commands nest as child
-    spans under the active RPC span — SQLAlchemy (Databend / Postgres / StarRocks) and
-    Redis. Global (no engine/client argument), so it covers the lazily-built, per-connection
-    engines PlaidCloud creates after startup. Each library is guarded independently and
-    best-effort: a missing optional instrumentation package (an older ``[tracing]`` install)
-    or a one-off ``instrument()`` failure must never break tracing or startup."""
+    """Best-effort global instrumentation of DB/cache clients at startup.
+
+    - **Redis** is fully covered: RedisInstrumentor patches ``Redis.execute_command`` on
+      the class, so every caller is instrumented regardless of import style.
+    - **SQLAlchemy**'s global patch replaces the ``sqlalchemy.create_engine`` *module
+      attribute*, so it only reaches call sites that resolve it at call time
+      (``import sqlalchemy; sqlalchemy.create_engine(...)``). Call sites that bound the
+      name at import time (``from sqlalchemy import create_engine``) — including
+      PlaidCloud's central ``orm.Connection`` engine factory — are **not** reached and
+      must instrument their engine explicitly via ``instrument_sqlalchemy_engine`` at
+      creation.
+
+    Each library is guarded independently: a missing optional extra (an older
+    ``[tracing]`` install) or a failed ``instrument()`` must never break tracing/startup."""
     try:
         from opentelemetry.instrumentation.sqlalchemy import SQLAlchemyInstrumentor
 
@@ -154,6 +162,24 @@ def _instrument_libraries():
         from opentelemetry.instrumentation.redis import RedisInstrumentor
 
         RedisInstrumentor().instrument()
+    except Exception:
+        pass
+
+
+def instrument_sqlalchemy_engine(engine):
+    """Attach query-span instrumentation to a specific SQLAlchemy engine.
+
+    Call this at engine creation for engines the global patch cannot reach — i.e. anything
+    built via ``from sqlalchemy import create_engine`` (notably the ``orm.Connection``
+    factory). Emits a child span per query under the active span. No-op when tracing is
+    disabled; best-effort so a missing extra or failure never breaks the caller. Safe to
+    call once per engine (engines are cached by the factory)."""
+    if not tracing_enabled():
+        return
+    try:
+        from opentelemetry.instrumentation.sqlalchemy import SQLAlchemyInstrumentor
+
+        SQLAlchemyInstrumentor().instrument(engine=engine)
     except Exception:
         pass
 

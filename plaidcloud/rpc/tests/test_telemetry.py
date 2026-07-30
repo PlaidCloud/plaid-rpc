@@ -177,6 +177,21 @@ def test_instrument_libraries_tolerates_missing_packages(monkeypatch):
     telemetry._instrument_libraries()  # must not raise
 
 
+def test_instrument_sqlalchemy_engine_attaches_when_enabled(monkeypatch):
+    monkeypatch.delenv("PLAID_TRACING_ENABLED", raising=False)
+    monkeypatch.setattr(telemetry, "_collector_reachable", lambda ep: True)
+    with mock.patch("opentelemetry.instrumentation.sqlalchemy.SQLAlchemyInstrumentor") as inst:
+        telemetry.instrument_sqlalchemy_engine("ENGINE")
+    inst.return_value.instrument.assert_called_once_with(engine="ENGINE")
+
+
+def test_instrument_sqlalchemy_engine_noop_when_tracing_disabled(monkeypatch):
+    monkeypatch.setenv("PLAID_TRACING_ENABLED", "false")
+    with mock.patch("opentelemetry.instrumentation.sqlalchemy.SQLAlchemyInstrumentor") as inst:
+        telemetry.instrument_sqlalchemy_engine("ENGINE")
+    inst.assert_not_called()
+
+
 def test_inject_skipped_when_not_initialized():
     telemetry._initialized = False
     carrier = {}
