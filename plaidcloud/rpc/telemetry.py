@@ -90,6 +90,28 @@ def _sample_ratio():
     return min(1.0, max(0.0, ratio))
 
 
+def _otlp_span_exporter(**kwargs):
+    from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
+
+    class SanitizingOTLPSpanExporter(OTLPSpanExporter):
+        """Keep raw query text inside the process."""
+
+        def _translate_data(self, data):
+            request = super()._translate_data(data)
+            for resource_spans in request.resource_spans:
+                for scope_spans in resource_spans.scope_spans:
+                    for span in scope_spans.spans:
+                        attributes = [
+                            attribute for attribute in span.attributes
+                            if attribute.key not in {"db.statement", "db.query.text"}
+                        ]
+                        span.ClearField("attributes")
+                        span.attributes.extend(attributes)
+            return request
+
+    return SanitizingOTLPSpanExporter(**kwargs)
+
+
 def init_tracing(service_name, org_id=None):
     """Install a global TracerProvider exporting to Tempo over OTLP gRPC.
 
@@ -114,7 +136,6 @@ def init_tracing(service_name, org_id=None):
     from opentelemetry.sdk.trace import TracerProvider
     from opentelemetry.sdk.trace.sampling import ParentBased, TraceIdRatioBased
     from opentelemetry.sdk.trace.export import BatchSpanProcessor
-    from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
 
     org = org_id or telemetry_org_id()
     endpoint = _endpoint()
@@ -128,7 +149,7 @@ def init_tracing(service_name, org_id=None):
         }),
         sampler=ParentBased(TraceIdRatioBased(ratio)),
     )
-    provider.add_span_processor(BatchSpanProcessor(OTLPSpanExporter(
+    provider.add_span_processor(BatchSpanProcessor(_otlp_span_exporter(
         endpoint=endpoint,
         insecure=True,                          # in-cluster, no TLS
         headers=(("x-scope-orgid", org),),      # gRPC metadata is lowercase

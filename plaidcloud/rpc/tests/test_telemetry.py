@@ -7,6 +7,8 @@ from unittest import mock
 import pytest
 from opentelemetry import trace
 from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.sdk.trace.export import SimpleSpanProcessor
+from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
 from opentelemetry.sdk.trace.sampling import ALWAYS_ON
 
 from plaidcloud.rpc import telemetry
@@ -111,7 +113,7 @@ def _install_and_capture(service="plaid-rpc-test", org_id=None):
     with mock.patch.object(telemetry, "_collector_reachable", return_value=True), mock.patch.object(
         telemetry, "_instrument_libraries"
     ), mock.patch(
-        "opentelemetry.exporter.otlp.proto.grpc.trace_exporter.OTLPSpanExporter"
+        "plaidcloud.rpc.telemetry._otlp_span_exporter"
     ) as exporter, mock.patch(
         "opentelemetry.sdk.trace.export.BatchSpanProcessor"
     ), mock.patch("opentelemetry.trace.set_tracer_provider") as set_provider:
@@ -155,7 +157,7 @@ def test_init_tracing_instruments_db_and_cache_libraries(monkeypatch):
     with mock.patch.object(telemetry, "_instrument_libraries") as instrument, mock.patch.object(
         telemetry, "_collector_reachable", return_value=True
     ), mock.patch(
-        "opentelemetry.exporter.otlp.proto.grpc.trace_exporter.OTLPSpanExporter"
+        "plaidcloud.rpc.telemetry._otlp_span_exporter"
     ), mock.patch("opentelemetry.sdk.trace.export.BatchSpanProcessor"), mock.patch(
         "opentelemetry.trace.set_tracer_provider"
     ):
@@ -176,6 +178,27 @@ def test_instrument_libraries_tolerates_missing_packages(monkeypatch):
 
     monkeypatch.setattr(builtins, "__import__", fake_import)
     telemetry._instrument_libraries()  # must not raise
+
+
+def test_otlp_exporter_drops_query_text():
+    memory = InMemorySpanExporter()
+    provider = TracerProvider()
+    provider.add_span_processor(SimpleSpanProcessor(memory))
+    with provider.get_tracer("test").start_as_current_span("query") as span:
+        span.set_attribute("db.statement", "select 'customer@example.com'")
+        span.set_attribute("db.query.text", "select 'customer@example.com'")
+        span.set_attribute("db.system", "postgresql")
+    request = telemetry._otlp_span_exporter(
+        endpoint="unused:4317", insecure=True
+    )._translate_data(memory.get_finished_spans())
+    attributes = [
+        attribute.key
+        for resource_spans in request.resource_spans
+        for scope_spans in resource_spans.scope_spans
+        for span in scope_spans.spans
+        for attribute in span.attributes
+    ]
+    assert attributes == ["db.system"]
 
 
 def test_instrument_libraries_instruments_sqlalchemy_and_redis():
