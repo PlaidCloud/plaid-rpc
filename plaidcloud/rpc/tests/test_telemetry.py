@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 # coding=utf-8
 
+import importlib
 from unittest import mock
 
 import pytest
@@ -175,6 +176,36 @@ def test_instrument_libraries_tolerates_missing_packages(monkeypatch):
 
     monkeypatch.setattr(builtins, "__import__", fake_import)
     telemetry._instrument_libraries()  # must not raise
+
+
+def test_instrument_libraries_instruments_sqlalchemy_and_redis():
+    importlib.import_module("opentelemetry.instrumentation.redis")
+    importlib.import_module("opentelemetry.instrumentation.sqlalchemy")
+    with mock.patch(
+        "opentelemetry.instrumentation.sqlalchemy.SQLAlchemyInstrumentor"
+    ) as sqlalchemy_instrumentor, mock.patch(
+        "opentelemetry.instrumentation.redis.RedisInstrumentor"
+    ) as redis_instrumentor:
+        telemetry._instrument_libraries()
+    sqlalchemy_instrumentor.return_value.instrument.assert_called_once_with()
+    redis_instrumentor.return_value.instrument.assert_called_once_with()
+
+
+def test_instrument_libraries_logs_instrumentor_errors():
+    importlib.import_module("opentelemetry.instrumentation.redis")
+    importlib.import_module("opentelemetry.instrumentation.sqlalchemy")
+    with mock.patch(
+        "opentelemetry.instrumentation.sqlalchemy.SQLAlchemyInstrumentor"
+    ) as sqlalchemy_instrumentor, mock.patch(
+        "opentelemetry.instrumentation.redis.RedisInstrumentor"
+    ) as redis_instrumentor, mock.patch.object(telemetry._logger, "exception") as log_exception:
+        sqlalchemy_instrumentor.return_value.instrument.side_effect = RuntimeError("nope")
+        redis_instrumentor.return_value.instrument.side_effect = RuntimeError("nope")
+        telemetry._instrument_libraries()
+    log_exception.assert_has_calls([
+        mock.call("Could not initialize SQLAlchemy OpenTelemetry instrumentation"),
+        mock.call("Could not initialize Redis OpenTelemetry instrumentation"),
+    ])
 
 
 def test_inject_skipped_when_not_initialized():

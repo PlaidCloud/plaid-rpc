@@ -12,6 +12,7 @@ stays cleanly off (no failing exporter) where Tempo isn't deployed. Set
 no effect until ``init_tracing`` is called.
 """
 
+import logging
 import os
 import socket
 
@@ -21,6 +22,7 @@ _DEFAULT_ENDPOINT = "tempo-distributor.cluster-components.svc:4317"
 
 _initialized = False
 _tracing_on = None  # cached tracing_enabled() result (flag ∧ collector reachable)
+_logger = logging.getLogger(__name__)
 
 
 def _pod_namespace():
@@ -158,14 +160,18 @@ def _instrument_libraries():
         from opentelemetry.instrumentation.sqlalchemy import SQLAlchemyInstrumentor
 
         SQLAlchemyInstrumentor().instrument()
+    except ImportError:
+        _logger.debug("SQLAlchemy OpenTelemetry instrumentation is unavailable")
     except Exception:
-        pass
+        _logger.exception("Could not initialize SQLAlchemy OpenTelemetry instrumentation")
     try:
         from opentelemetry.instrumentation.redis import RedisInstrumentor
 
         RedisInstrumentor().instrument()
+    except ImportError:
+        _logger.debug("Redis OpenTelemetry instrumentation is unavailable")
     except Exception:
-        pass
+        _logger.exception("Could not initialize Redis OpenTelemetry instrumentation")
 
 
 def inject_trace_context(carrier):
