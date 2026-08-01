@@ -286,6 +286,30 @@ class TestCallAsCoroutine:
         assert not re.search(r'File "[^"]+", line \d+', err['message'])
         assert 'Traceback (most recent call last)' not in err['message']
 
+    def test_syntax_error_message_drops_location_and_source(self):
+        # format_exception_only decorates SyntaxError with 'File "<path>", line N'
+        # plus the offending source line — both can be server-side, so neither may
+        # reach the client (sc-23492).
+        def fn():
+            compile('x ===== 1', '/srv/plaid/secret/user_expr.py', 'exec')
+
+        logger = logging.getLogger('test')
+        _, err = self._run(fn, 'generic error', False, False, False, logger)
+        assert err['message'] == 'generic error: SyntaxError: invalid syntax'
+        assert '/srv/plaid/secret' not in err['message']
+        assert 'x =====' not in err['message']
+
+    def test_indentation_error_keeps_its_own_type_name(self):
+        # IndentationError/TabError subclass SyntaxError; the surfaced type must be
+        # the concrete one, not the base class.
+        def fn():
+            compile('if True:\npass', '/srv/plaid/secret/user_expr.py', 'exec')
+
+        logger = logging.getLogger('test')
+        _, err = self._run(fn, None, False, False, False, logger)
+        assert err['message'].startswith('Unexpected error: IndentationError: ')
+        assert '/srv/plaid/secret' not in err['message']
+
     def test_unexpected_error_message_is_exception_not_traceback_header(self):
         # With no default_error, the surfaced message must be the exception type +
         # text, never the "Traceback (most recent call last):" header (sc-22705).

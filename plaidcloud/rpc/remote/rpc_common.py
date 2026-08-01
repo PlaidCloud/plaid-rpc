@@ -195,7 +195,15 @@ async def call_as_coroutine(function, default_error, use_thread, is_streamed, sy
         # Show the exception type and message but not the stack frames — enough to
         # diagnose without leaking the traceback to the user. (format_exception(..)[0]
         # is the "Traceback (most recent call last):" header, not the message.)
-        user_hint = ''.join(traceback.format_exception_only(exc)).strip()
+        if isinstance(exc, SyntaxError):
+            # SyntaxError is the one family format_exception_only decorates with a
+            # location: 'File "<path>", line N' plus the offending source line and a
+            # caret. Both can be server-side — the path always, and the source line
+            # whenever what failed to compile was ours rather than the caller's — so
+            # reduce it to the bare type and message.
+            user_hint = f'{type(exc).__name__}: {exc.msg}'
+        else:
+            user_hint = ''.join(traceback.format_exception_only(exc)).strip()
         return f'{default_error}: {user_hint}' if default_error else f'Unexpected error: {user_hint}'
     try:
         if asyncio.iscoroutinefunction(function):
