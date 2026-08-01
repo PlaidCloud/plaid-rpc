@@ -282,7 +282,7 @@ class TestCallAsCoroutine:
             raise RuntimeError('something broke')
 
         logger = logging.getLogger('test')
-        result, err = self._run(fn, 'generic error', False, False, False, logger)
+        _, err = self._run(fn, 'generic error', False, False, False, logger)
         assert not re.search(r'File "[^"]+", line \d+', err['message'])
         assert 'Traceback (most recent call last)' not in err['message']
 
