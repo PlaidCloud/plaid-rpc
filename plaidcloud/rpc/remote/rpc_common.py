@@ -196,7 +196,7 @@ async def call_as_coroutine(function, default_error, use_thread, is_streamed, sy
         # diagnose without leaking the traceback to the user. (format_exception(..)[0]
         # is the "Traceback (most recent call last):" header, not the message.)
         user_hint = ''.join(traceback.format_exception_only(exc)).strip()
-        return f'{f"Unexpected error: {user_hint}" if not default_error else default_error}'
+        return f'{default_error}: {user_hint}' if default_error else f'Unexpected error: {user_hint}'
     try:
         if asyncio.iscoroutinefunction(function):
             try:

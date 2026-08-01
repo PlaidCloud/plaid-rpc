@@ -3,6 +3,7 @@
 
 import asyncio
 import logging
+import re
 from unittest import mock
 
 import pytest
@@ -272,7 +273,18 @@ class TestCallAsCoroutine:
         logger = logging.getLogger('test')
         result, err = self._run(fn, 'generic error', False, False, False, logger)
         assert result is None
-        assert err['message'] == 'generic error'
+        assert err['message'] == 'generic error: RuntimeError: something broke'
+
+    def test_default_error_message_has_no_stack_frames(self):
+        # The cause is appended, but frame text ('File "...", line N') stays
+        # server-side in the logs (sc-23492).
+        def fn():
+            raise RuntimeError('something broke')
+
+        logger = logging.getLogger('test')
+        result, err = self._run(fn, 'generic error', False, False, False, logger)
+        assert not re.search(r'File "[^"]+", line \d+', err['message'])
+        assert 'Traceback (most recent call last)' not in err['message']
 
     def test_unexpected_error_message_is_exception_not_traceback_header(self):
         # With no default_error, the surfaced message must be the exception type +
@@ -349,7 +361,7 @@ class TestCallAsCoroutine:
 
         logger = logging.getLogger('test')
         result, err = self._run(fn, 'oops', False, False, False, logger)
-        assert err['message'] == 'oops'
+        assert err['message'] == 'oops: RuntimeError: async boom'
 
 
 class TestApplySortMoreCoverage:
