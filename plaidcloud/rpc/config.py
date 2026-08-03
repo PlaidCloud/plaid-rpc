@@ -301,9 +301,9 @@ class PlaidConfig:
             self.is_local = False
             try:
                 self.hostname = urlparse(self.rpc_uri).netloc
-            except Exception:
+            except ValueError:
                 self.hostname = 'Unknown'
-            logger.debug('Environment is configured, running PlaidCloud UDF on {}'.format(self.hostname))
+            logger.debug(f'Environment is configured, running PlaidCloud UDF on {self.hostname}')
             return True
 
         def _init_direct_params():

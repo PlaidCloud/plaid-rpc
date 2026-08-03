@@ -633,7 +633,7 @@ class TestPlaidConfigEnvUrlparseFallback:
         monkeypatch.setenv('__PLAID_STEP_ID__', 'sid')
         PlaidConfig._C = {}
         with mock.patch('plaidcloud.rpc.config.urlparse',
-                        side_effect=RuntimeError('bad parse')):
+                        side_effect=ValueError('bad parse')):
             cfg = PlaidConfig(config_path=None)
             assert cfg.hostname == 'Unknown'
         PlaidConfig._C = {}
