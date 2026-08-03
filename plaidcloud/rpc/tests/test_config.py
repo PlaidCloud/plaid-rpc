@@ -312,6 +312,59 @@ class TestPlaidConfigEnvironment:
         assert cfg.verify_ssl is False
 
 
+class TestRelaxedEnvironmentGate:
+    """sc-23202: the environment gate requires only __PLAID_RPC_URI__ and a token
+    (__PLAID_RPC_AUTH_TOKEN__ or a token_provider), both non-empty. The other four
+    __PLAID_* variables are read best-effort with a '' default and stay loud at the
+    point of use rather than silently sending construction to the plaid.conf hunt."""
+
+    FIXTURE = 'plaidcloud/rpc/tests/.plaid/plaid.conf'
+
+    def _clear_context(self, monkeypatch):
+        for key in ('__PLAID_PROJECT_ID__', '__PLAID_WORKSPACE_UUID__',
+                    '__PLAID_WORKFLOW_ID__', '__PLAID_STEP_ID__'):
+            monkeypatch.delenv(key, raising=False)
+
+    def test_uri_and_token_alone_configure_from_environment(self, monkeypatch):
+        monkeypatch.setenv('__PLAID_RPC_URI__', 'https://rpc.example.com')
+        monkeypatch.setenv('__PLAID_RPC_AUTH_TOKEN__', 'tok')
+        self._clear_context(monkeypatch)
+        cfg = PlaidConfig(config_path=None)
+        assert cfg.is_local is False
+        for prop in ('project_id', 'workflow_id', 'step_id'):
+            with pytest.raises(Exception, match='has not been set'):
+                getattr(cfg, prop)
+
+    def test_empty_uri_falls_back_to_local(self, monkeypatch):
+        """__PLAID_RPC_URI__='' used to pass the gate and yield a broken URI; now it
+        is treated as unset and construction falls to the config file."""
+        monkeypatch.setenv('__PLAID_RPC_URI__', '')
+        monkeypatch.setenv('__PLAID_RPC_AUTH_TOKEN__', 'tok')
+        monkeypatch.setenv('__PLAID_PROJECT_ID__', 'pid')
+        monkeypatch.setenv('__PLAID_WORKSPACE_UUID__', 'wsid')
+        monkeypatch.setenv('__PLAID_WORKFLOW_ID__', 'wfid')
+        monkeypatch.setenv('__PLAID_STEP_ID__', 'sid')
+        cfg = PlaidConfig(config_path=self.FIXTURE)
+        assert cfg.is_local is True
+
+    def test_absent_token_falls_back_to_local(self, monkeypatch):
+        monkeypatch.setenv('__PLAID_RPC_URI__', 'https://rpc.example.com')
+        monkeypatch.delenv('__PLAID_RPC_AUTH_TOKEN__', raising=False)
+        self._clear_context(monkeypatch)
+        cfg = PlaidConfig(config_path=self.FIXTURE)
+        assert cfg.is_local is True
+
+    def test_token_provider_satisfies_the_token_half(self, monkeypatch):
+        """D1: a token_provider counts as the token, so the Panel placeholder token
+        env var is no longer needed to reach the environment path."""
+        monkeypatch.setenv('__PLAID_RPC_URI__', 'https://rpc.example.com')
+        monkeypatch.delenv('__PLAID_RPC_AUTH_TOKEN__', raising=False)
+        self._clear_context(monkeypatch)
+        cfg = PlaidConfig(config_path=None, token_provider=lambda: 'fresh')
+        assert cfg.is_local is False
+        assert cfg.auth_token == ''
+
+
 class TestVerifySslResolution:
     """verify_ssl's default depends on how the connection was configured (sc-23168).
 
@@ -580,7 +633,7 @@ class TestPlaidConfigEnvUrlparseFallback:
         monkeypatch.setenv('__PLAID_STEP_ID__', 'sid')
         PlaidConfig._C = {}
         with mock.patch('plaidcloud.rpc.config.urlparse',
-                        side_effect=RuntimeError('bad parse')):
+                        side_effect=ValueError('bad parse')):
             cfg = PlaidConfig(config_path=None)
             assert cfg.hostname == 'Unknown'
         PlaidConfig._C = {}

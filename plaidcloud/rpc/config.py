@@ -275,33 +275,36 @@ class PlaidConfig:
         self.token_provider = token_provider
 
         def _check_environment_variables():
-            try:
-                # If this is running in UDF or Jupyter notebook then an RPC connection is already available
-                # Grab config values put in environment variables
-                self.rpc_uri = os.environ['__PLAID_RPC_URI__']
-                self.auth_uri = os.environ.get('__PLAID_AUTH_URI__')
-                self.auth_token = os.environ['__PLAID_RPC_AUTH_TOKEN__']
-                self._project_id = os.environ['__PLAID_PROJECT_ID__']
-                self.workspace_uuid = os.environ['__PLAID_WORKSPACE_UUID__']
-                self._workflow_id = os.environ['__PLAID_WORKFLOW_ID__']
-                self._step_id = os.environ['__PLAID_STEP_ID__']
-                # Absent means verify. An environment that must not verify has to say so —
-                # every deployed one already does (JupyterHub sets it, and workflow-runner
-                # propagates it into each UDF's environment).
-                self.verify_ssl = os.environ.get('__PLAID_VERIFY_SSL__', 'False') == 'True'
-                self.is_local = False
-                try:
-                    self.hostname = urlparse(self.rpc_uri).netloc
-                except:
-                    self.hostname = 'Unknown'
-                logger.debug('Environment is configured, running PlaidCloud UDF on {}'.format(self.hostname))
-                return True
-            except:
-                # This must be running from some environment other than UDF or Jupyter
-                # Need to use a config file to setup connection
+            # In a UDF or Jupyter notebook an RPC connection is already configured in the
+            # environment. Only the URI and a token (auth_token or token_provider) are
+            # required, both non-empty; the other four are read best-effort. workflow_id and
+            # step_id in particular are meaningless outside a workflow runner, so requiring
+            # them made callers invent sentinel values to satisfy the gate (sc-23202). The
+            # project_id / workflow_id / step_id properties still raise at the point of use,
+            # keeping "not set" a loud error there rather than a silent fallback here.
+            self.rpc_uri = os.environ.get('__PLAID_RPC_URI__', '')
+            self.auth_uri = os.environ.get('__PLAID_AUTH_URI__')
+            self.auth_token = os.environ.get('__PLAID_RPC_AUTH_TOKEN__', '')
+            self._project_id = os.environ.get('__PLAID_PROJECT_ID__', '')
+            self.workspace_uuid = os.environ.get('__PLAID_WORKSPACE_UUID__', '')
+            self._workflow_id = os.environ.get('__PLAID_WORKFLOW_ID__', '')
+            self._step_id = os.environ.get('__PLAID_STEP_ID__', '')
+            if not (self.rpc_uri and (self.auth_token or self.token_provider)):
+                # Some environment other than UDF or Jupyter: set up from a config file.
                 self.is_local = True
                 logger.debug("Environment not configured, running UDF Locally. Checking local configuration.")
                 return False
+            # Absent means verify. An environment that must not verify has to say so —
+            # every deployed one already does (JupyterHub sets it, and workflow-runner
+            # propagates it into each UDF's environment).
+            self.verify_ssl = os.environ.get('__PLAID_VERIFY_SSL__', 'False') == 'True'
+            self.is_local = False
+            try:
+                self.hostname = urlparse(self.rpc_uri).netloc
+            except ValueError:
+                self.hostname = 'Unknown'
+            logger.debug(f'Environment is configured, running PlaidCloud UDF on {self.hostname}')
+            return True
 
         def _init_direct_params():
             if not (auth_token or token_provider):
