@@ -6,6 +6,7 @@ import asyncio
 import itertools
 import numbers
 import operator
+import os
 import traceback
 import uuid
 from functools import partial
@@ -34,6 +35,17 @@ __maintainer__ = 'Paul Morel'
 __email__ = 'paul.morel@tartansolutions.com'
 
 
+def _reset_call_id_prefix():
+    """Re-prefixes a forked child, which would otherwise inherit both the parent's
+    prefix and its counter position and mint ids identical to its siblings'."""
+    global _CALL_ID_PREFIX
+    _CALL_ID_PREFIX = uuid.uuid4().hex[:8]
+
+
+if hasattr(os, 'register_at_fork'):  # POSIX only; this library also runs on Windows
+    os.register_at_fork(after_in_child=_reset_call_id_prefix)
+
+
 def next_call_id():
     """Returns a JSON-RPC request id, unique per call and ordered within the process.
 
@@ -41,11 +53,6 @@ def next_call_id():
     across them and leaves the server's paired Start/Finish log lines unmatchable —
     which is what a hard-coded id of 0 did to every call this library ever made. The
     prefix separates processes; the counter orders the calls within one.
-
-    Both are fixed at import, which covers `spawn` and `forkserver` (a fresh interpreter
-    re-imports) but not a bare `os.fork()`: forked siblings inherit one another's prefix
-    *and* counter position, so anything that makes RPC calls from a forked pool worker
-    reintroduces the collision this exists to remove.
     """
     return f'{_CALL_ID_PREFIX}-{next(_call_counter)}'
 
