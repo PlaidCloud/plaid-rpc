@@ -27,13 +27,6 @@ jobs:
         run: |
           uv pip install --system -e .[full]
           uv pip install --system -q ruff
-      - name: License Checker
-        uses: andersy005/gh-action-py-liccheck@main
-        with:
-          strategy-ini-file: ./liccheck.ini
-          level: cautious
-          requirements-txt-file: ./requirements.txt
-          liccheck-version: ${{ vars.LICCHECK_VERSION }}
       - name: Install ReviewDog
         uses: reviewdog/action-setup@v1
       - name: Perform Ruff Lint
@@ -41,6 +34,21 @@ jobs:
           REVIEWDOG_GITHUB_API_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           ruff check plaidcloud --output-format=concise --exit-zero 2>&1 | reviewdog -efm="%f:%l:%c: %m" -name="Ruff" -reporter=github-check -level=warning -fail-level=error
+  license:
+    name: Check Dependency Licenses
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+      # The extras are the set plaid installs in production; [test] is dev-only
+      # and out of scope. Policy and tooling live in the action, so a license
+      # decision is made once for the organisation rather than per repo.
+      - name: Check dependency licenses
+        uses: PlaidCloud/plaidcloud-github-actions/license-check@v1
+        with:
+          extras: full,tracing
+          python-version: ${{ env.PYTHON_VERSION }}
   test:
     name: Run Tests
     runs-on: ubuntu-latest
