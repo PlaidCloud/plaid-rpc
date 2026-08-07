@@ -443,6 +443,41 @@ class TestPlaidJSONDialect:
         key2 = table.insert().values(j={'a': 1})._generate_cache_key()
         assert key1 == key2
 
+    @pytest.mark.skipif(StarRocksDialect is None, reason="starrocks not installed")
+    def test_starrocks_emits_json(self):
+        # DDL stays JSON so native internal-catalog schemas are untouched; Iceberg maps JSON->variant.
+        assert PlaidJSON().compile(dialect=StarRocksDialect()) == 'JSON'
+
+    @pytest.mark.skipif(StarRocksDialect is None, reason="starrocks not installed")
+    def test_starrocks_variant_json_round_trip(self):
+        # Bare sqlalchemy.JSON suppresses bind_expression on INSERT, so a bound dict lands as a
+        # VARIANT *string*. The custom type must wrap the bind in PARSE_JSON so it stores an object.
+        import sqlalchemy as sa
+        dialect = StarRocksDialect()
+        impl = PlaidJSON().load_dialect_impl(dialect)
+        bind = impl.bind_processor(dialect)
+        assert bind({'a': [1, 'b']}) == '{"a":[1,"b"]}'
+        assert bind(None) is None
+        result = impl.result_processor(dialect, None)
+        assert result('{"a": [1, "b"]}') == {'a': [1, 'b']}
+        assert result(None) is None
+        table = sa.Table('t', sa.MetaData(), sa.Column('j', PlaidJSON()))
+        compiled = str(table.insert().values(j={'a': 1}).compile(dialect=dialect))
+        assert 'parse_json' in compiled.lower()
+
+    @pytest.mark.skipif(StarRocksDialect is None, reason="starrocks not installed")
+    def test_starrocks_variant_class_identity_stable(self):
+        import sqlalchemy as sa
+        dialect = StarRocksDialect()
+        impl1 = PlaidJSON().load_dialect_impl(dialect)
+        impl2 = PlaidJSON().load_dialect_impl(dialect)
+        assert type(impl1) is type(impl2)
+        assert impl1._static_cache_key == impl2._static_cache_key
+        table = sa.Table('t', sa.MetaData(), sa.Column('j', PlaidJSON()))
+        key1 = table.insert().values(j={'a': 1})._generate_cache_key()
+        key2 = table.insert().values(j={'a': 1})._generate_cache_key()
+        assert key1 == key2
+
 
 class TestPlaidTinyIntDialect:
 

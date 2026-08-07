@@ -20,7 +20,7 @@ import csv
 from operator import attrgetter
 
 from sqlalchemy.types import (TypeDecorator, DateTime, Unicode, CHAR, NVARCHAR, VARCHAR, UnicodeText, NUMERIC,
-                              TIMESTAMP, DATETIME, JSON, SMALLINT, VARBINARY, DECIMAL, String)
+                              TIMESTAMP, DATETIME, JSON, SMALLINT, VARBINARY, DECIMAL, String, UserDefinedType)
 
 
 import sqlalchemy
@@ -362,6 +362,41 @@ def _databricks_json_variant():  # pragma: no cover - requires databricks
     return JSONVariant
 
 
+@functools.lru_cache(maxsize=1)
+def _starrocks_json_variant():
+    """The installed starrocks dialect has no VARIANT type, and plain sqlalchemy.JSON suppresses
+    bind_expression on INSERT — so a bound dict is sent as a VARCHAR literal and StarRocks-on-Iceberg
+    stores the whole document as a VARIANT *string* (indexing returns NULL). Mirror the Snowflake/
+    Databricks variants: a plain type (not a JSON subclass, so bind_expression survives) that renders
+    JSON in DDL but wraps the bind in PARSE_JSON so the value stores as an object. Memoized for stable
+    class identity, same as the snowflake variant.
+    """
+    class JSONVariant(UserDefinedType):
+        cache_ok = True
+
+        def get_col_spec(self, **kw):
+            return 'JSON'
+
+        def bind_processor(self, dialect):
+            def process(value):
+                if value is None:
+                    return None
+                return json.dumps(value, ensure_ascii=False, separators=(',', ':'))
+            return process
+
+        def bind_expression(self, bindvalue):
+            return sqlalchemy.func.PARSE_JSON(bindvalue)
+
+        def result_processor(self, dialect, coltype):
+            def process(value):
+                if value is None:
+                    return None
+                return json.loads(value)
+            return process
+
+    return JSONVariant
+
+
 class PlaidJSON(TypeDecorator):
     """JSON type that implements as JSONB on Postgresql based environments
 
@@ -386,6 +421,8 @@ class PlaidJSON(TypeDecorator):
             return dialect.type_descriptor(_snowflake_json_variant())
         if is_dialect_databricks_based(dialect):  # pragma: no cover - requires databricks
             return dialect.type_descriptor(_databricks_json_variant())
+        if is_dialect_starrocks_based(dialect):
+            return dialect.type_descriptor(_starrocks_json_variant())
 
         return self.impl
 
