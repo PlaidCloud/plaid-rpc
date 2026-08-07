@@ -8,7 +8,7 @@ import pprint
 import orjson as json
 from toolz.dicttoolz import merge
 
-from plaidcloud.rpc.remote.rpc_common import call_as_coroutine
+from plaidcloud.rpc.remote.rpc_common import call_as_coroutine, next_call_id
 
 
 __author__ = "Paul Morel"
@@ -275,7 +275,12 @@ async def execute_json_rpc(msg, auth_id, version=1, base_path=BASE_MODULE_PATH, 
             }
         }
     # Actually execute the RPC call now
-    logger.info('Start "{}" {}'.format(method, id))
+    # A client on a plaidcloud-rpc older than next_call_id() sends a fixed id of 0 on
+    # every call, which makes the Start/Finish pair below unmatchable. Log a
+    # server-assigned id in that case, marked 'srv-' so the stale client stays visible.
+    # The response still echoes whatever the client sent.
+    log_id = id if id not in (None, 0) else f'srv-{next_call_id()}'
+    logger.info(f'Start "{method}" {log_id}')
     if is_streamed and stream_callback:
         params['stream_callback'] = stream_callback
     all_params = merge(params, extra_params or {})
@@ -358,4 +363,4 @@ async def execute_json_rpc(msg, auth_id, version=1, base_path=BASE_MODULE_PATH, 
             'result': result
         }
     finally:
-        logger.info('Finish "{}" {}'.format(method, id))
+        logger.info(f'Finish "{method}" {log_id}')

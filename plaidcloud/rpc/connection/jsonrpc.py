@@ -19,7 +19,7 @@ from toolz.dicttoolz import assoc
 
 from plaidcloud.rpc.orjson import unsupported_object_json_encoder
 from plaidcloud.rpc.remote.rpc_tools import PlainRPCCommon
-from plaidcloud.rpc.remote.rpc_common import RPCError, WARNING_CODE
+from plaidcloud.rpc.remote.rpc_common import RPCError, WARNING_CODE, next_call_id
 from plaidcloud.rpc.telemetry import inject_trace_context
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
@@ -148,7 +148,12 @@ def http_json_rpc(token=None, uri=None, verify_ssl=None, json_data=None, proxies
     # covers both sync and fire_and_forget paths. No-op when no tracer provider/active span.
     inject_trace_context(headers)
 
-    payload = json.dumps(assoc(json_data, 'id', 0), default=unsupported_object_json_encoder, option=json.OPT_NAIVE_UTC | json.OPT_NON_STR_KEYS)
+    # An id is always sent, even fire-and-forget: the server treats a missing id as a
+    # notification and answers nothing.
+    if json_data.get('id') is None:
+        json_data = assoc(json_data, 'id', next_call_id())
+
+    payload = json.dumps(json_data, default=unsupported_object_json_encoder, option=json.OPT_NAIVE_UTC | json.OPT_NON_STR_KEYS)
 
     if streamable():
         with _get_session(retry_obj=0) as session:

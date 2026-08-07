@@ -2,6 +2,7 @@
 # coding=utf-8
 
 import contextlib
+import json
 import os
 from unittest import mock
 
@@ -565,3 +566,41 @@ class TestSimpleRPCCallPath:
             rpc = SimpleRPC(token_provider, uri='https://example.com')
             rpc.analyze.method.call()
             assert mock_http.call_args[0][0] == 'tok-1'
+
+
+# ------------------------------------------------------------- request ids
+# Every call used to go out with a hard-coded id of 0, which made the server's
+# paired Start/Finish log lines unmatchable.
+
+class TestRequestId:
+
+    @staticmethod
+    def _sent_id(session):
+        return json.loads(session.post.call_args[1]['data'])['id']
+
+    def _post(self, session, json_data):
+        with mock.patch.object(jsonrpc, '_get_session', _patched_get_session(session)):
+            http_json_rpc(
+                token='t', uri='https://example.com/rpc', verify_ssl=True,
+                json_data=json_data, retry=False,
+            )
+        return self._sent_id(session)
+
+    def test_id_differs_between_calls(self):
+        session = mock.MagicMock()
+        session.post.return_value = _mk_response({'ok': True})
+        first = self._post(session, {'method': 'm', 'params': {}, 'jsonrpc': '2.0'})
+        second = self._post(session, {'method': 'm', 'params': {}, 'jsonrpc': '2.0'})
+        assert first != second
+
+    def test_caller_supplied_id_is_kept(self):
+        session = mock.MagicMock()
+        session.post.return_value = _mk_response({'ok': True})
+        assert self._post(session, {'method': 'm', 'params': {}, 'id': 762}) == 762
+
+    def test_simple_rpc_sends_a_usable_id(self):
+        session = mock.MagicMock()
+        session.post.return_value = _mk_response({'ok': True, 'result': 'x'})
+        with mock.patch.object(jsonrpc, '_get_session', _patched_get_session(session)):
+            SimpleRPC('token', uri='https://example.com', retry=False).analyze.project.list()
+        assert self._sent_id(session) not in (None, 0)
