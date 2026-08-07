@@ -2,12 +2,12 @@
 # coding=utf-8
 
 import asyncio
-import itertools
 import os
 import types
 import tempfile
 
 from plaidcloud.rpc.remote.json_rpc_server import get_callable_object, BASE_MODULE_PATH
+from plaidcloud.rpc.remote.rpc_common import next_call_id
 
 
 __author__ = 'Paul Morel'
@@ -18,7 +18,7 @@ __license__ = 'Apache 2.0'
 
 def _create_rpc_args(method, params):
     return {
-        'id': 0,
+        'id': next_call_id(),
         'method': method,
         'params': params,
         'jsonrpc': '2.0',
@@ -33,12 +33,12 @@ def get_auth_id(workspace_id, member_id, scopes):
     }
 
 
-def direct_rpc(auth_id, method, params, logger=None, sequence=None):
+def direct_rpc(auth_id, method, params, logger=None, call_id=None):
     callable_object, required_scope, default_error, is_streamed, use_thread = get_callable_object(
         method, version=1, base_path=BASE_MODULE_PATH, logger=logger
     )
     if logger:
-        logger.info(f'Start "{method}" {sequence if sequence is not None else ""}')
+        logger.info(f'Start "{method}" {call_id if call_id is not None else ""}')
     try:
         if asyncio.iscoroutinefunction(callable_object):
             result = asyncio.run(callable_object(auth_id=auth_id, **params))
@@ -55,15 +55,15 @@ def direct_rpc(auth_id, method, params, logger=None, sequence=None):
         return result
     finally:
         if logger:
-            logger.info(f'Finish "{method}" {sequence if sequence is not None else ""}')
+            logger.info(f'Finish "{method}" {call_id if call_id is not None else ""}')
 
 
-async def direct_rpc_async(auth_id, method, params, logger=None, sequence=None):
+async def direct_rpc_async(auth_id, method, params, logger=None, call_id=None):
     callable_object, required_scope, default_error, is_streamed, use_thread = get_callable_object(
         method, version=1, base_path=BASE_MODULE_PATH, logger=logger
     )
     if logger:
-        logger.info(f'Start "{method}" {sequence if sequence is not None else ""}')
+        logger.info(f'Start "{method}" {call_id if call_id is not None else ""}')
     try:
         if asyncio.iscoroutinefunction(callable_object):
             if use_thread:
@@ -85,7 +85,7 @@ async def direct_rpc_async(auth_id, method, params, logger=None, sequence=None):
         return result
     finally:
         if logger:
-            logger.info(f'Finish "{method}" {sequence if sequence is not None else ""}')
+            logger.info(f'Finish "{method}" {call_id if call_id is not None else ""}')
 
 
 class PlainRPCCommon(object):
@@ -165,7 +165,6 @@ class DirectRPC(PlainRPCCommon):
     rpc = DirectRPC(auth_id=auth_id)
     scopes = rpc.identity.me.scopes()
     """
-    sequence = itertools.count()
 
     def __init__(self, workspace_id=None, user_id=None, scopes=None, auth_id=None, use_async=False, logger=None):
         if not auth_id:
@@ -174,7 +173,7 @@ class DirectRPC(PlainRPCCommon):
         def call_rpc(method_path, params, fire_and_forget=False):
             # fire_and_forget does nothing here.
             if use_async:
-                return direct_rpc_async(auth_id, method_path, params, logger, next(self.sequence))
-            return direct_rpc(auth_id, method_path, params, logger, next(self.sequence))
+                return direct_rpc_async(auth_id, method_path, params, logger, next_call_id())
+            return direct_rpc(auth_id, method_path, params, logger, next_call_id())
 
         super(DirectRPC, self).__init__(call_rpc)

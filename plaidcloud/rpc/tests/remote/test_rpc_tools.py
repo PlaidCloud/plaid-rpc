@@ -23,10 +23,14 @@ class TestCreateRpcArgs:
 
     def test_basic_structure(self):
         result = _create_rpc_args('analyze/project/list', {'filter': 'all'})
-        assert result['id'] == 0
         assert result['method'] == 'analyze/project/list'
         assert result['params'] == {'filter': 'all'}
         assert result['jsonrpc'] == '2.0'
+
+    def test_id_is_unique_per_call(self):
+        first = _create_rpc_args('some/method', {})
+        second = _create_rpc_args('some/method', {})
+        assert first['id'] != second['id']
 
     def test_empty_params(self):
         result = _create_rpc_args('some/method', {})
@@ -149,7 +153,7 @@ class TestDirectRpc:
                 'some/method',
                 {},
                 logger=mock_logger,
-                sequence=1,
+                call_id='abc123-1',
             )
         assert result == 'res'
         # logger should be called for start and finish
@@ -329,6 +333,9 @@ class TestDirectRpcAsyncExtra:
                 'some/method',
                 {},
                 logger=mock_logger,
-                sequence=42,
+                call_id='abc123-42',
             ))
         assert mock_logger.info.call_count >= 2
+        logged = [c.args[0] for c in mock_logger.info.call_args_list]
+        assert 'Start "some/method" abc123-42' in logged
+        assert 'Finish "some/method" abc123-42' in logged

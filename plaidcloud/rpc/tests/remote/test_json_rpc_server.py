@@ -401,3 +401,39 @@ class TestGetCallableObjectMissing:
         with mock.patch('builtins.__import__', return_value=FakeMod()):
             with pytest.raises(Exception, match='does not exist'):
                 get_callable_object('nonexistent_fn', 1, base_path='fake.path')
+
+
+class TestStartFinishLogPairing:
+    """Start and Finish must carry the same id, and one that identifies the call."""
+
+    @staticmethod
+    def _run_logged(msg):
+        @rpc_method()
+        async def my_rpc_fn(auth_id):
+            return 'result'
+
+        logger = mock.Mock()
+        with mock.patch(
+            'plaidcloud.rpc.remote.json_rpc_server.get_callable_object',
+            return_value=(my_rpc_fn, None, None, False, False),
+        ):
+            result = asyncio.run(execute_json_rpc(msg, auth_id={'scopes': ['public']}, logger=logger))
+        logged = [c.args[0] for c in logger.info.call_args_list]
+        return result, [line for line in logged if line.startswith(('Start ', 'Finish '))]
+
+    def test_client_id_is_logged_on_both_lines(self):
+        _, lines = self._run_logged({'id': 762, 'jsonrpc': '2.0', 'method': 'm', 'params': {}})
+        assert lines == ['Start "m" 762', 'Finish "m" 762']
+
+    def test_legacy_zero_id_gets_a_marked_server_id(self):
+        result, lines = self._run_logged({'id': 0, 'jsonrpc': '2.0', 'method': 'm', 'params': {}})
+        start, finish = lines
+        assert start.startswith('Start "m" srv-')
+        assert finish == start.replace('Start ', 'Finish ')
+        assert result['id'] == 0
+
+    def test_repeated_zero_ids_do_not_collide(self):
+        msg = {'id': 0, 'jsonrpc': '2.0', 'method': 'm', 'params': {}}
+        first = self._run_logged(msg)[1][0]
+        second = self._run_logged(msg)[1][0]
+        assert first != second

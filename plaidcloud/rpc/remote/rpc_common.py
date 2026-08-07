@@ -2,22 +2,29 @@
 # coding=utf-8
 
 # import sys
-import traceback
-import operator
 import asyncio
+import itertools
+import numbers
+import operator
+import traceback
+import uuid
+from functools import partial
+from functools import wraps as _wraps
+
 # import html
 from operator import itemgetter
-from functools import wraps as _wraps
-from functools import partial
-import numbers
 
-from toolz.itertoolz import groupby, concat
 from toolz.functoolz import identity
+from toolz.itertoolz import concat, groupby
+
 # import bleach
 
 
 WARNING_CODE = -1000
 SCRIPT_REGEX = r'<\s*(\/)?\s*s\s*c\s*r\s*i\s*p\s*t\s*>'  # script tag or closing tag, with any amount of whitespace in between (\s*). Use with re.I flag for case-insensitive.
+
+_CALL_ID_PREFIX = uuid.uuid4().hex[:8]
+_call_counter = itertools.count(1)
 
 __author__ = 'Paul Morel'
 __copyright__ = 'Copyright 2010-2021, Tartan Solutions, Inc'
@@ -25,6 +32,22 @@ __credits__ = ['Paul Morel']
 __license__ = 'Apache 2.0'
 __maintainer__ = 'Paul Morel'
 __email__ = 'paul.morel@tartansolutions.com'
+
+
+def next_call_id():
+    """Returns a JSON-RPC request id, unique per call and ordered within the process.
+
+    One RPC server takes calls from many client processes, so a bare counter collides
+    across them and leaves the server's paired Start/Finish log lines unmatchable —
+    which is what a hard-coded id of 0 did to every call this library ever made. The
+    prefix separates processes; the counter orders the calls within one.
+
+    Both are fixed at import, which covers `spawn` and `forkserver` (a fresh interpreter
+    re-imports) but not a bare `os.fork()`: forked siblings inherit one another's prefix
+    *and* counter position, so anything that makes RPC calls from a forked pool worker
+    reintroduces the collision this exists to remove.
+    """
+    return f'{_CALL_ID_PREFIX}-{next(_call_counter)}'
 
 
 def rpc_error(message, data=None, code=-32603):
