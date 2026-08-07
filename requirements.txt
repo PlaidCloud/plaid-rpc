@@ -6,7 +6,7 @@ PyJWT
 PyYAML
 requests
 requests-futures
-setuptools==81.0.0
+setuptools==83.0.0
 orjson
 SQLAlchemy
 toolz
