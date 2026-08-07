@@ -19,6 +19,8 @@ from plaidcloud.rpc.remote.rpc_common import (
     get_isolation_from_auth_id,
     rpc_method,
     call_as_coroutine,
+    next_call_id,
+    _reset_call_id_prefix,
 )
 
 
@@ -461,3 +463,22 @@ class TestCallAsCoroutineMoreBranches:
         logger = logging.getLogger('test')
         with pytest.raises(asyncio.exceptions.TimeoutError):
             self._run(fn, None, True, False, False, logger)
+
+
+class TestNextCallId:
+
+    @staticmethod
+    def _prefix(call_id):
+        return call_id.rsplit('-', 1)[0]
+
+    def test_ordered_within_the_process(self):
+        first, second = next_call_id(), next_call_id()
+        assert self._prefix(first) == self._prefix(second)
+        assert int(second.rsplit('-', 1)[1]) == int(first.rsplit('-', 1)[1]) + 1
+
+    def test_a_forked_child_gets_its_own_prefix(self):
+        """Siblings inherit the parent's counter position, so only the prefix keeps
+        their ids apart."""
+        before = next_call_id()
+        _reset_call_id_prefix()
+        assert self._prefix(next_call_id()) != self._prefix(before)

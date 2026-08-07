@@ -116,7 +116,7 @@ async def execute_json_rpc(msg, auth_id, version=1, base_path=BASE_MODULE_PATH, 
 
     Returns:
         JSON-RPC compliant response dict consisting of:
-          - id (int): The unique request id from the requester
+          - id: The request id, echoed back verbatim (str, int or None per the spec)
           - ok (bool): The processing state result
           - result: Result of the request
           - error (dict): Error information including code, message, and data
@@ -275,10 +275,13 @@ async def execute_json_rpc(msg, auth_id, version=1, base_path=BASE_MODULE_PATH, 
             }
         }
     # Actually execute the RPC call now
-    # A client on a plaidcloud-rpc older than next_call_id() sends a fixed id of 0 on
-    # every call, which makes the Start/Finish pair below unmatchable. Log a
-    # server-assigned id in that case, marked 'srv-' so the stale client stays visible.
+    # Two kinds of request can't name themselves: a notification (no id, per spec — still
+    # answered with nothing below), and a client sending the fixed 0 this library used to
+    # hard-code. Both would make the Start/Finish pair unmatchable, so log a
+    # server-assigned id, marked 'srv-' to stay distinguishable from a real client id.
     # The response still echoes whatever the client sent.
+    # This is permanent, not transitional: plaidlink hand-builds its `"id":0` payload and
+    # posts it with bare requests, so no pin bump of this library reaches that call site.
     log_id = id if id not in (None, 0) else f'srv-{next_call_id()}'
     logger.info(f'Start "{method}" {log_id}')
     if is_streamed and stream_callback:
