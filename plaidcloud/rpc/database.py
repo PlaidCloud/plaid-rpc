@@ -253,6 +253,10 @@ class PlaidUnicode(TypeDecorator):
             # declared length is enforced with truncation errors on Snowflake. Metadata readers see the
             # reflected length change (255 -> 16777216)
             return dialect.type_descriptor(VARCHAR)
+        if is_dialect_starrocks_based(dialect):  # pragma: no cover - requires starrocks
+            # A bounded VARCHAR(n) rejects oversized text on StarRocks; STRING is the unbounded type
+            from starrocks.datatype import STRING
+            return dialect.type_descriptor(STRING())
         if is_dialect_databricks_based(dialect):  # pragma: no cover - requires databricks
             # No NVARCHAR on Databricks, and bare VARCHAR (no length) is invalid; STRING is the unbounded type
             return dialect.type_descriptor(String)

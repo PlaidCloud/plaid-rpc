@@ -362,6 +362,10 @@ class TestPlaidUnicodeDialect:
     def test_databricks_emits_string(self):
         assert PlaidUnicode(length=255).compile(dialect=DatabricksDialect()) == 'STRING'
 
+    @pytest.mark.skipif(StarRocksDialect is None, reason="starrocks not installed")
+    def test_starrocks_emits_string(self):
+        assert PlaidUnicode(length=255).compile(dialect=StarRocksDialect()) == 'STRING'
+
 
 class TestPlaidJSONDialect:
 
