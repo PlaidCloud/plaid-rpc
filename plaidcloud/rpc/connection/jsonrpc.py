@@ -12,7 +12,6 @@ from requests.adapters import HTTPAdapter
 from requests_futures.sessions import FuturesSession
 from urllib3.util.retry import Retry
 import orjson as json
-from packaging import version
 from urllib.parse import urljoin
 
 from toolz.dicttoolz import assoc
@@ -35,6 +34,8 @@ STREAM_ENDPOINTS = {
     'analyze/query/download_dataframe',
     'document/view/download_stream',
 }
+
+REST_ROOT = '/rest/v1/'
 
 download_folder = os.path.join(tempfile.gettempdir(), "plaid/download")
 
@@ -63,7 +64,7 @@ def _pool_maxsize():
 
 def _get_shared_session():
     """Lazily build a module-level requests.Session for standard (non-streaming, non-fire-and-forget)
-    RPC calls. Reusing one session amortises TCP+TLS handshakes across calls.
+    RPC and REST calls. Reusing one session amortises TCP+TLS handshakes across calls.
 
     The mounted adapter holds a single RPCRetry that reads check_allow_transmit from the
     thread-local _rpc_context, so per-call cancellation still works on the shared session.
@@ -214,6 +215,65 @@ def http_json_rpc(token=None, uri=None, verify_ssl=None, json_data=None, proxies
                 _rpc_context.check_allow_transmit = None
 
 
+def http_rest(token, uri, http_method, path, verify_ssl=None, params=None, body=None, proxies=None,
+              check_allow_transmit=None, retry=True, headers=None):
+    """
+    Sends a request to the PlaidCloud REST API on the host that serves `uri`.
+
+    Returns:
+        The decoded JSON response, or None when the response has no body.
+    Args:
+        token (str): oauth2 token
+        uri (str): the server's JSON-RPC uri. Only its host is used — the REST API is found at
+            /rest/v1 on that host, so a path prefix on `uri` is not preserved
+        http_method (str): GET, POST, PUT or DELETE
+        path (str): the endpoint path under /rest/v1, e.g. 'analyze/dimension/dimensions'
+        verify_ssl (bool): passed to requests. flag to check the server's certs, or not.
+        params (dict, optional): query string parameters; a list value repeats its key
+        body (json-encodable object, optional): the JSON request body
+        proxies (dict): Dictionary mapping protocol or protocol and hostname to the URL of the proxy.
+        check_allow_transmit (callable, optional): For use in retry, callable method to see if retries are still valid to send
+        retry (bool, optional): Whether or not to use retry at all, default True. Retries cover 500, 502
+            and 504, so a write the server committed before answering can be applied twice; a caller whose
+            request is not safe to repeat wants a connection built with retry=False
+        headers (dict, optional): Custom headers to send with the request
+    Raises:
+        RPCError: for anything but a 2xx, with the status as `code`, so a caller already handling RPC
+            failures handles these the same way. Redirects are not followed, so a 3xx raises rather
+            than reading as an empty response.
+    """
+    headers = dict(headers or {})
+    if token:
+        headers['Authorization'] = f'Bearer {token}'
+    data = None
+    if body is not None:
+        headers['Content-Type'] = 'application/json'
+        data = json.dumps(body, default=unsupported_object_json_encoder, option=json.OPT_NAIVE_UTC | json.OPT_NON_STR_KEYS)
+    inject_trace_context(headers)
+
+    with _get_session(shared=retry) as session:
+        _rpc_context.check_allow_transmit = check_allow_transmit
+        try:
+            response = session.request(
+                http_method, urljoin(uri, REST_ROOT + path.lstrip('/')), params=params, data=data,
+                headers=headers, verify=verify_ssl, proxies=proxies, allow_redirects=False,
+            )
+        finally:
+            _rpc_context.check_allow_transmit = None
+    if response.status_code >= 300:
+        raise RPCError(f'{response.status_code}: {_rest_error_detail(response)}', data=response.text,
+                       code=response.status_code)
+    return json.loads(response.content) if response.content else None
+
+
+def _rest_error_detail(response):
+    """The `detail` a PlaidCloud REST error carries, or the raw body when it has none."""
+    try:
+        return json.loads(response.content)['detail']
+    except (ValueError, TypeError, KeyError):
+        return response.text
+
+
 class RPCRetry(Retry):
     def __init__(self, *args, check_allow_transmit=None, **kwargs):
         """
@@ -222,7 +282,7 @@ class RPCRetry(Retry):
                 This can be used to prevent retry of RPC methods once a workflow has been cancelled and the RPC fails
         """
         kwargs.update(dict(
-            allowed_methods=['POST'],
+            allowed_methods=['GET', 'POST', 'PUT', 'DELETE'],
             status_forcelist=[500, 502, 504],
             backoff_factor=0.1,
         ))
@@ -262,7 +322,12 @@ class SimpleRPC(PlainRPCCommon):
     Example:
     rpc = SimpleRPC(token, uri=uri, verify_ssl=verify_ssl, workspace=workspace)
     scopes = rpc.identity.me.scopes()
+
+    `call_rest` reaches the same host's REST API with the same token, TLS, retry and cancellation:
+    dimensions = rpc.call_rest('GET', 'analyze/dimension/dimensions', params={'project_id': project_id})
     """
+    call_rest = None
+
     def __init__(self, token, uri=None, verify_ssl=None, workspace=None, proxies=None, check_allow_transmit=None,
                  retry=True, headers=None):
         verify_ssl = bool(verify_ssl)
@@ -304,6 +369,16 @@ class SimpleRPC(PlainRPCCommon):
                             code=error.get('code'),
                         )
 
+        def call_rest(http_method, path, params=None, body=None):
+            if not self.allow_transmit:
+                return None
+            return http_rest(
+                token() if callable(token) else token, uri, http_method, path, verify_ssl,
+                params=params, body=body, proxies=proxies, check_allow_transmit=check_allow_transmit,
+                retry=retry, headers=headers,
+            )
+
+        self.call_rest = call_rest
         super(SimpleRPC, self).__init__(call_rpc, check_allow_transmit)
 
     @property

@@ -11,7 +11,7 @@ import requests
 
 from plaidcloud.rpc.connection import jsonrpc
 from plaidcloud.rpc.connection.jsonrpc import (
-    RPCRetry, SimpleRPC, http_json_rpc, STREAM_ENDPOINTS,
+    RPCRetry, SimpleRPC, http_json_rpc, http_rest, STREAM_ENDPOINTS,
     _get_session, _get_shared_session, _rpc_context,
 )
 from plaidcloud.rpc.remote.rpc_common import RPCError, WARNING_CODE
@@ -56,7 +56,7 @@ class TestRPCRetry:
 
     def test_default_initialization(self):
         retry = RPCRetry()
-        assert 'POST' in retry.allowed_methods
+        assert set(retry.allowed_methods) == {'GET', 'POST', 'PUT', 'DELETE'}
         assert 500 in retry.status_forcelist
         assert 502 in retry.status_forcelist
         assert 504 in retry.status_forcelist
@@ -604,3 +604,189 @@ class TestRequestId:
         with mock.patch.object(jsonrpc, '_get_session', _patched_get_session(session)):
             SimpleRPC('token', uri='https://example.com', retry=False).analyze.project.list()
         assert self._sent_id(session) not in (None, 0)
+
+
+# ------------------------------------------------------------------ http_rest
+
+def _rest_response(status_code=200, content=b''):
+    """A real Response, so `ok`, `content` and `text` behave as they do off the wire."""
+    response = requests.Response()
+    response.status_code = status_code
+    response._content = content
+    response.encoding = 'utf-8'
+    return response
+
+
+@contextlib.contextmanager
+def _rest_session(response):
+    """Patch _get_session to yield a Session returning `response`; also yields the kwargs each open used."""
+    session = mock.create_autospec(requests.Session, instance=True)
+    session.request.return_value = response
+    opened = []
+
+    @contextlib.contextmanager
+    def fake(**kwargs):
+        opened.append(kwargs)
+        yield session
+
+    with mock.patch.object(jsonrpc, '_get_session', fake):
+        yield session, opened
+
+
+def _send_rest(**kwargs):
+    call = {'token': 'tok', 'uri': 'https://example.com/json-rpc/', 'http_method': 'GET', 'path': 'analyze/dimension/dimensions'}
+    return http_rest(**{**call, **kwargs})
+
+
+class TestHttpRest:
+
+    def test_request_goes_under_rest_root_on_the_rpc_host(self):
+        with _rest_session(_rest_response(content=b'{}')) as (session, _):
+            _send_rest(verify_ssl=True)
+        args, kwargs = session.request.call_args
+        assert args == ('GET', 'https://example.com/rest/v1/analyze/dimension/dimensions')
+        assert kwargs['verify'] is True
+        assert kwargs['allow_redirects'] is False
+
+    def test_leading_slash_on_path_is_tolerated(self):
+        with _rest_session(_rest_response(content=b'{}')) as (session, _):
+            _send_rest(path='/analyze/dimension/dimensions')
+        assert session.request.call_args[0][1] == 'https://example.com/rest/v1/analyze/dimension/dimensions'
+
+    def test_token_sets_bearer_header(self):
+        with _rest_session(_rest_response(content=b'{}')) as (session, _):
+            _send_rest(token='abc')
+        assert session.request.call_args[1]['headers']['Authorization'] == 'Bearer abc'
+
+    def test_no_token_no_auth_header(self):
+        with _rest_session(_rest_response(content=b'{}')) as (session, _):
+            _send_rest(token=None)
+        assert 'Authorization' not in session.request.call_args[1]['headers']
+
+    def test_body_is_sent_as_json(self):
+        with _rest_session(_rest_response(content=b'{}')) as (session, _):
+            _send_rest(http_method='POST', body={'children': ['a', 'b']})
+        kwargs = session.request.call_args[1]
+        assert json.loads(kwargs['data']) == {'children': ['a', 'b']}
+        assert kwargs['headers']['Content-Type'] == 'application/json'
+
+    def test_no_body_sends_no_data_or_content_type(self):
+        with _rest_session(_rest_response(content=b'{}')) as (session, _):
+            _send_rest()
+        kwargs = session.request.call_args[1]
+        assert kwargs['data'] is None
+        assert 'Content-Type' not in kwargs['headers']
+
+    def test_params_are_passed_as_query_string(self):
+        with _rest_session(_rest_response(content=b'{}')) as (session, _):
+            _send_rest(params={'children': ['a', 'b']})
+        assert session.request.call_args[1]['params'] == {'children': ['a', 'b']}
+
+    def test_custom_headers_are_sent_without_mutating_the_callers_dict(self):
+        headers = {'X-Custom': '1'}
+        with _rest_session(_rest_response(content=b'{}')) as (session, _):
+            _send_rest(headers=headers)
+        assert session.request.call_args[1]['headers']['X-Custom'] == '1'
+        assert headers == {'X-Custom': '1'}
+
+    def test_trace_context_is_injected(self):
+        def inject(headers):
+            headers['traceparent'] = '00-abc-def-01'
+
+        with (
+            _rest_session(_rest_response(content=b'{}')) as (session, _),
+            mock.patch.object(jsonrpc, 'inject_trace_context', side_effect=inject),
+        ):
+            _send_rest()
+        assert session.request.call_args[1]['headers']['traceparent'] == '00-abc-def-01'
+
+    def test_json_body_is_decoded(self):
+        with _rest_session(_rest_response(content=b'{"children": ["a"]}')):
+            assert _send_rest() == {'children': ['a']}
+
+    def test_empty_body_returns_none(self):
+        with _rest_session(_rest_response(status_code=204)):
+            assert _send_rest(http_method='DELETE') is None
+
+    def test_error_raises_rpc_error_with_status_and_detail(self):
+        with (
+            _rest_session(_rest_response(status_code=422, content=b'{"detail": "Name is required"}')),
+            pytest.raises(RPCError) as raised,
+        ):
+            _send_rest()
+        assert raised.value.code == 422
+        assert str(raised.value) == '422: Name is required'
+
+    @pytest.mark.parametrize('content', [b'Bad Gateway', b'{"message": "nope"}', b'["nope"]'])
+    def test_error_without_a_detail_carries_the_body(self, content):
+        with (
+            _rest_session(_rest_response(status_code=502, content=content)),
+            pytest.raises(RPCError) as raised,
+        ):
+            _send_rest()
+        assert str(raised.value) == f'502: {content.decode()}'
+
+    def test_a_redirect_raises_rather_than_reading_as_an_empty_response(self):
+        with (
+            _rest_session(_rest_response(status_code=302)),
+            pytest.raises(RPCError) as raised,
+        ):
+            _send_rest()
+        assert raised.value.code == 302
+
+    @pytest.mark.parametrize('retry', [True, False])
+    def test_shared_session_only_when_retrying(self, retry):
+        with _rest_session(_rest_response(content=b'{}')) as (_, opened):
+            _send_rest(retry=retry)
+        assert opened == [{'shared': retry}]
+
+    def test_check_allow_transmit_is_visible_to_retries_then_cleared(self):
+        check = mock.Mock(return_value=True)
+        seen = []
+
+        def request(*args, **kwargs):
+            seen.append(_rpc_context.check_allow_transmit)
+            return _rest_response(content=b'{}')
+
+        with _rest_session(_rest_response()) as (session, _):
+            session.request.side_effect = request
+            _send_rest(check_allow_transmit=check)
+        assert seen == [check]
+        assert _rpc_context.check_allow_transmit is None
+
+    def test_check_allow_transmit_cleared_when_the_request_raises(self):
+        with _rest_session(_rest_response()) as (session, _):
+            session.request.side_effect = requests.ConnectionError('down')
+            with pytest.raises(requests.ConnectionError):
+                _send_rest(check_allow_transmit=lambda: True)
+        assert _rpc_context.check_allow_transmit is None
+
+
+class TestSimpleRPCCallRest:
+
+    def test_forwards_the_connections_settings(self):
+        check = mock.Mock(return_value=True)
+        with mock.patch.object(jsonrpc, 'http_rest', return_value={'ok': 1}) as mock_rest:
+            rpc = SimpleRPC(lambda: 'tok', uri='https://example.com/json-rpc/', verify_ssl=True,
+                            proxies={'https': 'proxy'}, check_allow_transmit=check, retry=False, headers={'h': 'v'})
+            result = rpc.call_rest('POST', 'analyze/dimension/node', params={'p': 1}, body={'b': 2})
+        assert result == {'ok': 1}
+        assert mock_rest.call_args == mock.call(
+            'tok', 'https://example.com/json-rpc/', 'POST', 'analyze/dimension/node', True,
+            params={'p': 1}, body={'b': 2}, proxies={'https': 'proxy'}, check_allow_transmit=check,
+            retry=False, headers={'h': 'v'},
+        )
+
+    def test_string_token_is_sent_as_is(self):
+        with mock.patch.object(jsonrpc, 'http_rest') as mock_rest:
+            SimpleRPC('tok', uri='https://example.com/json-rpc/').call_rest('GET', 'x')
+        assert mock_rest.call_args[0][0] == 'tok'
+
+    def test_nothing_is_sent_once_transmit_is_disallowed(self):
+        with mock.patch.object(jsonrpc, 'http_rest') as mock_rest:
+            rpc = SimpleRPC('tok', uri='https://example.com/json-rpc/', check_allow_transmit=lambda: False)
+            assert rpc.call_rest('GET', 'x') is None
+        mock_rest.assert_not_called()
+
+    def test_is_not_an_rpc_namespace_before_init(self):
+        assert object.__new__(SimpleRPC).call_rest is None
