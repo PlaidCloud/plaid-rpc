@@ -32,6 +32,7 @@ from plaidcloud.rpc.database import (
     PlaidTimestamp,
     PlaidTinyInt,
     PlaidUnicode,
+    PlaidVector,
 )
 from plaidcloud.rpc.functions import RegexMapKeyError, regex_map
 from plaidcloud.rpc.messytables.types import BoolType as _BoolType
@@ -52,7 +53,13 @@ __email__ = 'paul.morel@tartansolutions.com'
 
 _ANALYZE_TYPE = regex_map({
         r'^any$': 'text',  # qsv stats emits "Any" when a column has no homogeneous type — treat as free text
-        r'^array$': 'text',
+        # A StarRocks ARRAY<FLOAT> column compiles to this literal string; float32 is the
+        # only element type an embedding uses, and the one measured bit-exact (sc-30350).
+        # ARRAY<DOUBLE>, ARRAY<INT> and nested arrays deliberately do NOT match -- they are
+        # not embeddings, and were already refused, so they keep being refused rather than
+        # silently becoming vectors.
+        r'^array<float>$': 'vector',
+        r'^array$': 'text',  # Element type unknown, so it cannot be a vector; stays free text
         r'^bool$': 'boolean',
         r'^boolean$': 'boolean',
         r'^s\d+': 'text',
@@ -109,7 +116,7 @@ _ANALYZE_TYPE = regex_map({
         r'^geography$': 'text',
         r'^spatial_(?:geometry|geography)_types$': 'text',  # spatial_geometry_types + spatial_geography_types
         r'^table$': 'text',
-        r'^vector$': 'text',
+        r'^vector$': 'vector',
         # parquet types
         r'^map$': 'text',
         r'^list$': 'text',
@@ -130,10 +137,28 @@ class UnsupportedDtype(ValueError):
 
     Deliberately not a `KeyError`: `RegexMapKeyError` is one, so every upstream
     `except KeyError` swallows it and the dtype silently becomes a default again.
+
+    Three refusals, told apart by the attributes: an undeclared dtype carries neither
+    `capability` nor `dialect`, a declared dtype that cannot do something carries
+    `capability`, and a declared dtype with no representation on an engine carries
+    `dialect`.
     """
 
-    def __init__(self, dtype, context: str, capability: str | None = None, canonical: str | None = None):
-        if capability is None and not dtype:
+    def __init__(
+        self,
+        dtype,
+        context: str,
+        capability: str | None = None,
+        canonical: str | None = None,
+        dialect: str | None = None,
+    ):
+        if dialect is not None:
+            # A dialect refusal is not a capability refusal: `vector` declares
+            # sqlalchemy=True and has a real SQLAlchemy type, it just has no
+            # representation on this engine. Saying 'not sqlalchemy-capable' here would
+            # contradict the declaration a caller can read for itself.
+            refusal = f'not available on the {dialect!r} dialect'
+        elif capability is None and not dtype:
             refusal = 'missing; no dtype was given'
         elif capability is None:
             refusal = 'not a declared analyze dtype, nor a recognized source type spelling'
@@ -146,6 +171,7 @@ class UnsupportedDtype(ValueError):
         self.context = context
         self.capability = capability
         self.canonical = canonical
+        self.dialect = dialect
 
 
 class Dtype(NamedTuple):
@@ -164,7 +190,8 @@ class Dtype(NamedTuple):
     profilable: str = 'count_only'  # 'none' | 'count_only' | 'values'
 
 
-# Every dtype a stored column may carry: what analyze_type can infer (13), plus what
+# Every dtype a stored column may carry: what analyze_type can infer (14 -- the original
+# 13 plus 'vector', which sc-30352 added to the INFERRED range as well), plus what
 # the client offers in its dtype picklist (ANALYZE_DATA_TYPES), plus 'geography',
 # which only _sqlalchemy_from_dtype names. It is therefore NOT the range of
 # analyze_type, and not the picklist either -- analyze_type can no more return
@@ -205,6 +232,20 @@ DTYPES: Mapping[str, Dtype] = MappingProxyType({
         pandas=None, arrow=False, joinable_as_key=False, profilable='none',
     ),
     'geography': Dtype(pandas=None, arrow=False, joinable_as_key=False),
+    # A float32 embedding, unparameterized by dimension. New, so nothing existing is
+    # preserved here: every axis is declared to what is correct rather than to today's
+    # behaviour. pandas='object' is what a column of numpy float32 arrays actually is in
+    # pandas, and is lossless -- the same choice json and largebinary make; it serves the
+    # callers that pass a dtype string. It does NOT keep the SQLAlchemy-instance caller
+    # working: that one stringifies the type on the default dialect, where PlaidVector
+    # refuses before this declaration is ever read. default_agg=None refuses aggregation
+    # outright -- agg_type() would otherwise emit SUM() over a 1536-float array.
+    # profilable='none' is cost, not leakage: COUNT(DISTINCT) over full embeddings scans
+    # every byte of the widest column in the table for a cardinality nobody asked for.
+    # Not a join key: array equality over 1536 floats is not an identity.
+    'vector': Dtype(
+        pandas='object', joinable_as_key=False, default_agg=None, profilable='none',
+    ),
 })
 
 
@@ -308,21 +349,38 @@ def arrow_type_from_analyze_type(dtype: str, use_decimal_type: bool = False):
         DataType: The arrow/parquet type that matches `dtype`
     """
     try:
-        from pyarrow import date64, decimal128, from_numpy_dtype, json_, string
+        from pyarrow import (
+            date64,
+            decimal128,
+            float32,
+            from_numpy_dtype,
+            json_,
+            list_,
+            string,
+        )
     except ImportError as exc:
         raise ImportError('Use of this method requires full install. Try running `pip install plaid-rpc[full]`') from exc
-    key = _key(dtype)
+    # Canonical, not the raw spelling: every branch below tests `key`, so a source
+    # spelling that resolves to a special case used to be admitted and then fall through
+    # to the generic path. 'ARRAY<FLOAT>' -- the exact string reflection feeds in -- was
+    # staged as pyarrow.string(); 'date(%Y)' as timestamp[s]; 'bson' as string().
+    key, _ = _resolve(dtype, 'arrow_type_from_analyze_type')
     require_dtype_capability(key, 'arrow', 'arrow_type_from_analyze_type')
     if key == 'date':
         # Special case. Pandas treats all date types as timestamp, arrow needs to specify
         return date64()
-    if key.startswith('json'):
+    if key == 'json':
         # Numpy treats this like a generic object, specify json
         return json_()
     if key == 'currency':
         # Stored user-declared money type — always an exact decimal in parquet,
         # regardless of use_decimal_type (which callers only set for SF/MSSQL).
         return decimal128(18, 4)
+    if key == 'vector':
+        # Must return before pandas_dtype_from_sql: 'object' falls through to string()
+        # below, which would store the embedding as text. LIST<float> is what StarRocks'
+        # native Parquet unload already emits for an ARRAY<FLOAT> column (sc-30350).
+        return list_(float32())
     np_type = pandas_dtype_from_sql(key)
     if np_type == 'object':
         # Fall back to string
@@ -470,6 +528,10 @@ def analyze_type(dtype):
         never returns — the 'currency' *input* spelling here is a source type
         name (e.g. MS Access Currency, a 19,4 decimal) and maps to 'numeric'
         so inference can never auto-narrow money into DECIMAL(18, 4).
+
+        'vector' is the one dtype this function's range gained after the original
+        13: a StarRocks ARRAY<FLOAT> column's compiled type string infers to it.
+        A bare 'array' spelling carries no element type, so it stays text.
     Examples:
         >>> analyze_type('time')
         'time'
@@ -491,6 +553,12 @@ def analyze_type(dtype):
         'json'
         >>> analyze_type('uuid')
         'uuid'
+        >>> analyze_type('ARRAY<FLOAT>')
+        'vector'
+        >>> analyze_type('vector')
+        'vector'
+        >>> analyze_type('array')
+        'text'
     """
     key = _key(dtype)
 
@@ -589,6 +657,7 @@ _sqlalchemy_from_dtype = regex_map({
     r'^double$': DOUBLE,
     r'^geometry': PlaidGeometry,
     r'^geography': PlaidGeography,
+    r'^vector$': PlaidVector,
 })
 
 def sqlalchemy_from_dtype(dtype):
