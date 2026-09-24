@@ -1,22 +1,47 @@
 #!/usr/bin/env python
+from collections.abc import Mapping
+from types import MappingProxyType
+from typing import NamedTuple
+
+import sqlalchemy
 from sqlalchemy import (
-    BIGINT, INTEGER, SMALLINT, TEXT, Boolean, Interval, Date, Time, FLOAT
+    BIGINT,
+    FLOAT,
+    INTEGER,
+    SMALLINT,
+    TEXT,
+    Boolean,
+    Date,
+    Interval,
+    Time,
 )
 from sqlalchemy.sql.sqltypes import LargeBinary
-import sqlalchemy
+
 # Check SQLAlchemy version
 if sqlalchemy.__version__.startswith('2.'):
     from sqlalchemy.types import DOUBLE
 else:  # pragma: no cover
     from databend_sqlalchemy.types import DOUBLE
 from plaidcloud.rpc.database import (
-    PlaidUnicode, PlaidNumeric, PlaidCurrency, PlaidTimestamp, PlaidJSON, GUIDHyphens, PlaidTinyInt, PlaidGeography, PlaidGeometry
+    GUIDHyphens,
+    PlaidCurrency,
+    PlaidGeography,
+    PlaidGeometry,
+    PlaidJSON,
+    PlaidNumeric,
+    PlaidTimestamp,
+    PlaidTinyInt,
+    PlaidUnicode,
 )
-
-
-from plaidcloud.rpc.functions import regex_map, RegexMapKeyError
-from plaidcloud.rpc.messytables.types import IntegerType, StringType, DecimalType, DateType, BoolType as _BoolType, type_guess as _type_guess
-
+from plaidcloud.rpc.functions import RegexMapKeyError, regex_map
+from plaidcloud.rpc.messytables.types import BoolType as _BoolType
+from plaidcloud.rpc.messytables.types import (
+    DateType,
+    DecimalType,
+    IntegerType,
+    StringType,
+)
+from plaidcloud.rpc.messytables.types import type_guess as _type_guess
 
 __author__ = 'Paul Morel'
 __copyright__ = 'Copyright 2010-2023, Tartan Solutions, Inc'
@@ -99,26 +124,176 @@ _ANALYZE_TYPE = regex_map({
         r'^ole.*$': 'largebinary',
 })
 
-_PANDAS_DTYPE_FROM_SQL = regex_map({
-    r'^boolean$': 'bool',
-    r'^text$': 'object',
-    r'^nvarchar.*$': 'object',
-    r'^varchar.*$': 'object',
-    r'^tinyint$': 'Int8',
-    r'^smallint$': 'Int16',
-    r'^integer$': 'Int64',
-    r'^bigint$': 'Int64',
-    r'^numeric$': 'float64',
-    r'^currency$': 'float64',
-    r'^decimal.*': 'float64',
-    r'^timestamp\b.*': 'datetime64[s]',
-    r'^interval$': 'timedelta64[s]',
-    r'^date$': 'datetime64[s]',
-    r'^time\b.*': 'datetime64[s]',
-    r'^datetime.*': 'datetime64[s]',
-    r'^largebinary$': 'object',
-    r'^json*$': 'object',
+
+class UnsupportedDtype(ValueError):
+    """Raised when the admission boundary refuses a dtype.
+
+    Deliberately not a `KeyError`: `RegexMapKeyError` is one, so every upstream
+    `except KeyError` swallows it and the dtype silently becomes a default again.
+    """
+
+    def __init__(self, dtype, context: str, capability: str | None = None, canonical: str | None = None):
+        if capability is None and not dtype:
+            refusal = 'missing; no dtype was given'
+        elif capability is None:
+            refusal = 'not a declared analyze dtype, nor a recognized source type spelling'
+        elif canonical is None or canonical == dtype:
+            refusal = f'not {capability}-capable'
+        else:
+            refusal = f'not {capability}-capable; a source type spelling for {canonical!r}'
+        super().__init__(f'dtype {dtype!r}: {refusal} (asked by {context})')
+        self.dtype = dtype
+        self.context = context
+        self.capability = capability
+        self.canonical = canonical
+
+
+class Dtype(NamedTuple):
+    """What an analyze dtype may be used for, so a caller asks instead of guessing.
+
+    The defaults describe an ordinary scalar column: representable everywhere,
+    usable as a join key, summed by default, counted but not picklisted when
+    profiled. A declaration states only where a dtype differs from that.
+    """
+    pandas: str | None
+    arrow: bool = True
+    sqlalchemy: bool = True
+    joinable_as_key: bool = True
+    aggregatable: bool = False
+    default_agg: str | None = 'sum'  # 'group' | 'sum' | None to refuse aggregation
+    profilable: str = 'count_only'  # 'none' | 'count_only' | 'values'
+
+
+# Every dtype a stored column may carry: what analyze_type can infer (13), plus what
+# the client offers in its dtype picklist (ANALYZE_DATA_TYPES), plus 'geography',
+# which only _sqlalchemy_from_dtype names. It is therefore NOT the range of
+# analyze_type, and not the picklist either -- analyze_type can no more return
+# 'bitmap' than it can 'geography'. This is the OUTPUT direction; _ANALYZE_TYPE is
+# the INPUT direction (source-system type spelling -> canonical dtype), and a key
+# here need not appear there. Declarations reproduce today's behaviour, warts
+# included: default_agg mirrors table_explorer_common.agg_type(), which groups
+# only text/boolean/date/timestamp/time, so interval/json/uuid/largebinary
+# default to 'sum'. profilable mirrors table.py's _PROFILE_* sets, and
+# joinable_as_key mirrors frame_join_multi_validator._DTYPE_ENUM.
+DTYPES: Mapping[str, Dtype] = MappingProxyType({
+    'text': Dtype(pandas='object', default_agg='group', profilable='values'),
+    'varchar': Dtype(pandas='object', joinable_as_key=False, profilable='values'),
+    'boolean': Dtype(pandas='bool', default_agg='group'),
+    'tinyint': Dtype(pandas='Int8', aggregatable=True, profilable='values'),
+    'smallint': Dtype(pandas='Int16', aggregatable=True, profilable='values'),
+    'integer': Dtype(pandas='Int64', aggregatable=True, profilable='values'),
+    'bigint': Dtype(pandas='Int64', aggregatable=True, profilable='values'),
+    'serial': Dtype(pandas='Int64', profilable='values'),
+    'bigserial': Dtype(pandas='Int64', profilable='values'),
+    'numeric': Dtype(pandas='float64', aggregatable=True),
+    'decimal': Dtype(pandas='float64', aggregatable=True),
+    'float': Dtype(pandas='float64', aggregatable=True),
+    'double': Dtype(pandas='float64', aggregatable=True),
+    'currency': Dtype(pandas='float64', aggregatable=True),
+    'date': Dtype(pandas='datetime64[s]', default_agg='group'),
+    'time': Dtype(pandas='datetime64[s]', default_agg='group'),
+    'timestamp': Dtype(pandas='datetime64[s]', default_agg='group'),
+    'interval': Dtype(pandas='timedelta64[s]'),
+    'json': Dtype(pandas='object', profilable='none'),
+    'uuid': Dtype(pandas=None, arrow=False),
+    'largebinary': Dtype(pandas='object', profilable='none'),
+    'bitmap': Dtype(
+        pandas=None, arrow=False, sqlalchemy=False,
+        joinable_as_key=False, profilable='none',
+    ),
+    'geometry': Dtype(
+        pandas=None, arrow=False, joinable_as_key=False, profilable='none',
+    ),
+    'geography': Dtype(pandas=None, arrow=False, joinable_as_key=False),
 })
+
+
+# What a declaration holds when it cannot do a thing at all. Compared against rather
+# than tested for truth: 'none' and 'group' are truthy strings, so a bare
+# `if getattr(declared, capability)` admits an unprofilable dtype for profiling.
+_UNAVAILABLE = {
+    'pandas': None,
+    'arrow': False,
+    'sqlalchemy': False,
+    'joinable_as_key': False,
+    'aggregatable': False,
+    'default_agg': None,
+    'profilable': 'none',
+}
+
+
+def _key(dtype) -> str:
+    # A missing dtype must not become str(None) -> 'none', which _ANALYZE_TYPE maps to
+    # 'text' -- a half-added column would then admit as text. '' matches no pattern in
+    # any table, so it is refused like any other unknown.
+    return '' if dtype is None else str(dtype).lower()
+
+
+def _resolve(dtype, context: str) -> tuple[str, Dtype]:
+    """The canonical dtype and its declaration, or a refusal. The one admission path."""
+    key = _key(dtype)
+    declared = DTYPES.get(key)
+    if declared is not None:
+        return key, declared
+    try:
+        canonical = _ANALYZE_TYPE(key)
+        return canonical, DTYPES[canonical]
+    except (RegexMapKeyError, KeyError):
+        # A plain KeyError here is a dtype _ANALYZE_TYPE resolves to that DTYPES does not
+        # declare: a half-added dtype. It must refuse, not leak the KeyError this
+        # boundary exists to stop.
+        raise UnsupportedDtype(key, context) from None
+
+
+def admit_dtype(dtype, context: str) -> Dtype:
+    """Returns the declaration for `dtype`, or refuses it.
+
+    Accepts a canonical analyze dtype, or a source-system type spelling that
+    _ANALYZE_TYPE resolves to one. Anything else -- including a missing dtype -- is
+    refused by name.
+
+    Args:
+        dtype (str): a canonical analyze dtype, or a source type spelling
+        context (str): what is asking, named in the refusal
+
+    Raises:
+        UnsupportedDtype: if neither vocabulary declares `dtype`
+
+    Examples:
+        >>> admit_dtype('numeric', 'docs').default_agg
+        'sum'
+        >>> admit_dtype('nvarchar(500)', 'docs').pandas
+        'object'
+    """
+    return _resolve(dtype, context)[1]
+
+
+def require_dtype_capability(dtype, capability: str, context: str) -> Dtype:
+    """Returns the declaration for `dtype`, refusing it unless it can do `capability`.
+
+    Args:
+        dtype (str): a canonical analyze dtype, or a source type spelling
+        capability (str): a field of `Dtype`
+        context (str): what is asking, named in the refusal
+
+    Raises:
+        UnsupportedDtype: if `dtype` is undeclared, or cannot do `capability`
+        ValueError: if `capability` is not a declared capability
+
+    Examples:
+        >>> require_dtype_capability('text', 'arrow', 'docs').arrow
+        True
+    """
+    if capability not in _UNAVAILABLE:
+        raise ValueError(
+            f'unknown dtype capability {capability!r}; declared capabilities are '
+            f'{sorted(_UNAVAILABLE)}'
+        )
+    canonical, declared = _resolve(dtype, context)
+    if getattr(declared, capability) == _UNAVAILABLE[capability]:
+        raise UnsupportedDtype(_key(dtype), context, capability, canonical)
+    return declared
+
 
 def arrow_type_from_analyze_type(dtype: str, use_decimal_type: bool = False):
     """Returns an arrow/parquet type given an analyze type
@@ -127,26 +302,28 @@ def arrow_type_from_analyze_type(dtype: str, use_decimal_type: bool = False):
         dtype (str): The analyze data type
 
     Raises:
-        ValueError: If 'date' is passed in due to a bug in arrow
+        UnsupportedDtype: If `dtype` is undeclared, or declares arrow=False
 
     Returns:
         DataType: The arrow/parquet type that matches `dtype`
     """
     try:
-        from pyarrow import from_numpy_dtype, string, date64, decimal128, json_
+        from pyarrow import date64, decimal128, from_numpy_dtype, json_, string
     except ImportError as exc:
         raise ImportError('Use of this method requires full install. Try running `pip install plaid-rpc[full]`') from exc
-    if dtype == 'date':
+    key = _key(dtype)
+    require_dtype_capability(key, 'arrow', 'arrow_type_from_analyze_type')
+    if key == 'date':
         # Special case. Pandas treats all date types as timestamp, arrow needs to specify
         return date64()
-    if dtype.startswith('json'):
+    if key.startswith('json'):
         # Numpy treats this like a generic object, specify json
         return json_()
-    if dtype == 'currency':
+    if key == 'currency':
         # Stored user-declared money type — always an exact decimal in parquet,
         # regardless of use_decimal_type (which callers only set for SF/MSSQL).
         return decimal128(18, 4)
-    np_type = pandas_dtype_from_sql(dtype)
+    np_type = pandas_dtype_from_sql(key)
     if np_type == 'object':
         # Fall back to string
         return string()
@@ -283,8 +460,10 @@ def analyze_type(dtype):
     Args:
         dtype (str): a string containing a dtype from sql, or from pandas.
     Returns:
-        (str): An analyze dtype. Should be one of ('text', 'numeric', 'smallint',
-        'integer', 'bigint', 'boolean', 'date', 'time', 'timestamp', 'interval')
+        (str): A canonical analyze dtype. Always a key of DTYPES.
+
+    Raises:
+        UnsupportedDtype: If `dtype` is not a recognized source type spelling
 
     Note:
         'currency' is a stored, user-selected analyze dtype that this function
@@ -313,7 +492,7 @@ def analyze_type(dtype):
         >>> analyze_type('uuid')
         'uuid'
     """
-    key = str(dtype).lower()
+    key = _key(dtype)
 
     # No f'in idea why timestamp is getting mangled into some type of time field.  Force it!
     # DO NOT REMOVE THIS HACK until you verify timestamps and times are being handled correctly 
@@ -324,11 +503,8 @@ def analyze_type(dtype):
 
     try:
         return _ANALYZE_TYPE(key)
-    except KeyError:
-        raise Exception((
-            "Unrecognized dtype: '{}'. If you think it's valid, "
-            "please add it to _ANALYZE_TYPE."
-        ).format(dtype))
+    except RegexMapKeyError:
+        raise UnsupportedDtype(key, 'analyze_type') from None
 
 
 def pandas_dtype_from_sql(sql):
@@ -339,6 +515,9 @@ def pandas_dtype_from_sql(sql):
 
     Returns (str):
         A dtype suitable for pandas
+
+    Raises:
+        UnsupportedDtype: If `sql` is undeclared, or has no pandas representation
 
     Examples:
         >>> pandas_dtype_from_sql('time')
@@ -351,11 +530,7 @@ def pandas_dtype_from_sql(sql):
         'datetime64[s]'
     """
 
-    key = str(sql).lower()
-    try:
-        return _PANDAS_DTYPE_FROM_SQL(key)
-    except RegexMapKeyError:
-        return key
+    return require_dtype_capability(sql, 'pandas', 'pandas_dtype_from_sql').pandas
 
 
 _sqlalchemy_from_dtype = regex_map({
@@ -422,6 +597,8 @@ def sqlalchemy_from_dtype(dtype):
         A sqlalchemy type class
     Args:
         dtype (str): a string that we're going to try to interpret as a dtype
+    Raises:
+        UnsupportedDtype: If `dtype` has no sqlalchemy type
     Examples:
         >>> sqlalchemy_from_dtype('time')
         <class 'sqlalchemy.sql.sqltypes.Time'>
@@ -444,8 +621,14 @@ def sqlalchemy_from_dtype(dtype):
         >>> sqlalchemy_from_dtype('uuid')
         <class 'plaidcloud.rpc.database.GUIDHyphens'>
     """
-    key = str(dtype).lower()
-    return _sqlalchemy_from_dtype(key)
+    key = _key(dtype)
+    try:
+        return _sqlalchemy_from_dtype(key)
+    except RegexMapKeyError:
+        # _resolve refuses an unknown dtype; anything it admits is known but has no
+        # sqlalchemy type under this spelling, which is a different refusal.
+        canonical, _ = _resolve(key, 'sqlalchemy_from_dtype')
+        raise UnsupportedDtype(key, 'sqlalchemy_from_dtype', 'sqlalchemy', canonical) from None
 
 
 class BoolType(_BoolType):
