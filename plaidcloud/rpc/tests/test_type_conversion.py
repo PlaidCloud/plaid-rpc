@@ -28,7 +28,7 @@ from plaidcloud.rpc.type_conversion import (
 from plaidcloud.rpc.messytables.core import Cell
 from plaidcloud.rpc.database import (
     PlaidNumeric, PlaidCurrency, PlaidTimestamp, PlaidJSON, GUIDHyphens,
-    PlaidUnicode, PlaidTinyInt, PlaidGeometry, PlaidGeography,
+    PlaidUnicode, PlaidTinyInt, PlaidGeometry, PlaidGeography, PlaidVector,
 )
 from plaidcloud.rpc.functions import RegexMapKeyError
 
@@ -92,15 +92,27 @@ class TestAnalyzeType:
         ('bit', 'numeric'),
         ('object', 'text'),
         ('array', 'text'),
+        ('array<float>', 'vector'),
+        ('ARRAY<FLOAT>', 'vector'),
         ('map', 'text'),
         ('list', 'text'),
         ('enum', 'text'),
-        ('vector', 'text'),
+        ('vector', 'vector'),
         ('long', 'bigint'),
         ('currency', 'numeric'),
     ])
     def test_known_types(self, input_type, expected):
         assert analyze_type(input_type) == expected
+
+    @pytest.mark.parametrize('spelling', [
+        'array<double>', 'array<int>', 'array<integer>', 'array<string>',
+        'array<array<float>>', 'array<struct<x float>>',
+    ])
+    def test_only_float_element_arrays_are_vectors(self, spelling):
+        # These were already refused, and must keep being refused rather than silently
+        # becoming vectors: DOUBLE is float64, and the rest are not embeddings at all.
+        with pytest.raises(UnsupportedDtype):
+            analyze_type(spelling)
 
     def test_case_insensitive(self):
         assert analyze_type('VARCHAR') == 'text'
@@ -534,11 +546,11 @@ class TestDtypeRegistry:
             for spelling in (
                 'nvarchar(5000)', 'bool', 'int8', 'int16', 'int32', 'int64', 'float64',
                 'numeric', 'datetime', 'timedelta64[ns]', 'date', 'time', 'bytea',
-                'uuid', 'jsonb', 'text',
+                'uuid', 'jsonb', 'text', 'array<float>',
             )
         }
         assert inferred <= set(DTYPES)
-        assert len(inferred) == 13
+        assert len(inferred) == 14
 
     @pytest.mark.parametrize('dtype', sorted(DTYPES))
     def test_sqlalchemy_declaration_matches_the_type_map(self, dtype):
@@ -582,7 +594,7 @@ class TestDtypeRegistry:
         assert {d for d in DTYPES if DTYPES[d].joinable_as_key} == join_enum
 
     def test_registry_is_exactly_the_picklist_plus_what_inference_emits(self):
-        # PlaidClient Constants.js ANALYZE_DATA_TYPES, and the 13 dtypes analyze_type
+        # PlaidClient Constants.js ANALYZE_DATA_TYPES, and the 14 dtypes analyze_type
         # can return. Asserted both ways: a key in neither is unreachable and should
         # not be here, and a missing key means a column dtype nothing can serve.
         picklist = {
@@ -594,6 +606,10 @@ class TestDtypeRegistry:
         inferred = {
             'text', 'numeric', 'smallint', 'integer', 'bigint', 'boolean', 'date',
             'time', 'timestamp', 'interval', 'largebinary', 'uuid', 'json',
+            # sc-30352: inferred from a StarRocks ARRAY<FLOAT> column's compiled type
+            # string, and not offered in the client picklist -- a vector column is
+            # created by the embedding step, never hand-picked.
+            'vector',
         }
         # 'geography' is in neither, but _sqlalchemy_from_dtype maps it, so a column
         # can carry it even though nothing offers or infers it.
@@ -612,11 +628,16 @@ class TestDtypeRegistry:
         assert {d for d in DTYPES if DTYPES[d].default_agg == 'group'} == {
             'text', 'boolean', 'date', 'timestamp', 'time',
         }
+        # agg_type() returns 'sum' for everything outside that group list, so a dtype that
+        # must not be aggregated has to say so rather than inherit the default.
+        assert {d for d in DTYPES if DTYPES[d].default_agg is None} == {'vector'}
 
     def test_profilable_matches_todays_profile_sets(self):
-        # plaid core/api_utilities/analyze/table.py _PROFILE_* sets.
+        # plaid core/api_utilities/analyze/table.py _PROFILE_* sets. 'vector' is not in
+        # those sets because plaid has no vector columns yet; it is declared unprofilable
+        # on cost -- see TestVectorDtype.test_profiling_is_refused_on_cost.
         assert {d for d in DTYPES if DTYPES[d].profilable == 'none'} == {
-            'largebinary', 'bitmap', 'geometry', 'json',
+            'largebinary', 'bitmap', 'geometry', 'json', 'vector',
         }
         assert {d for d in DTYPES if DTYPES[d].profilable == 'values'} == {
             'text', 'varchar', 'tinyint', 'smallint', 'integer', 'bigint',
@@ -628,6 +649,138 @@ class TestDtypeRegistry:
             pandas='object', arrow=True, sqlalchemy=True, joinable_as_key=True,
             aggregatable=False, default_agg='sum', profilable='count_only',
         )
+
+
+class TestVectorDtype:
+    """`vector` is a float32 embedding column, unparameterized by dimension.
+
+    It is a new dtype, so unlike the rest of the registry there is no existing behaviour
+    to preserve: every axis is declared to what is correct.
+    """
+
+    def test_the_compiled_starrocks_type_string_infers_to_vector(self):
+        # What a StarRocks ARRAY<FLOAT> column actually reflects as. The old
+        # r'^vector$' and r'^array$' rows could never match it -- both are anchored.
+        assert analyze_type('ARRAY<FLOAT>') == 'vector'
+
+    def test_the_bare_vector_spelling_now_means_the_vector_dtype(self):
+        # Was 'text'. Leaving it there would make analyze_type('vector') disagree with
+        # admit_dtype('vector'), which reads DTYPES first -- the exact class of
+        # inconsistency the admission boundary exists to remove.
+        assert analyze_type('vector') == 'vector'
+        assert admit_dtype('vector', 'test') is DTYPES['vector']
+
+    def test_the_bare_array_spelling_is_still_text(self):
+        # No element type, so it cannot be an embedding, and a source that reflects it
+        # would start refusing if the row were retired.
+        assert analyze_type('array') == 'text'
+
+    @pytest.mark.parametrize('spelling', ['vector(768)', 'vector(1536)', 'array<float>(768)'])
+    def test_there_is_no_dimension_channel(self, spelling):
+        # Dimension is column metadata enforced at write time, not part of the dtype.
+        with pytest.raises(UnsupportedDtype):
+            analyze_type(spelling)
+
+    def test_sqlalchemy_type_is_plaid_vector(self):
+        assert sqlalchemy_from_dtype('vector') is PlaidVector
+
+    def test_pandas_holds_it_as_object(self):
+        # A column of numpy float32 arrays is an object Series in pandas -- losslessly,
+        # so declaring pandas=None would falsely claim it is unrepresentable and would
+        # refuse every dataframe read of a table that happens to carry a vector column.
+        assert pandas_dtype_from_sql('vector') == 'object'
+
+    @_REQUIRES_JSON
+    def test_arrow_type_is_a_list_of_float32(self):
+        # Matches what StarRocks' native Parquet unload emits, and must not fall through
+        # to the object -> string() branch, which would write the embedding as text.
+        import pyarrow
+        assert arrow_type_from_analyze_type('vector') == pyarrow.list_(pyarrow.float32())
+        assert str(arrow_type_from_analyze_type('vector')) == 'list<item: float>'
+
+    @_REQUIRES_JSON
+    @pytest.mark.parametrize('spelling', ['vector', 'array<float>', 'ARRAY<FLOAT>'])
+    def test_every_spelling_reaches_the_same_arrow_type(self, spelling):
+        # 'ARRAY<FLOAT>' is the literal string reflection feeds in
+        # (datastore_tools: analyze_type(c.type.compile(eng.dialect))), so it is the input
+        # that matters most -- and it was admitted, missed the vector branch, and staged
+        # the embedding as pyarrow.string().
+        import pyarrow
+        assert arrow_type_from_analyze_type(spelling) == pyarrow.list_(pyarrow.float32())
+
+    @_REQUIRES_JSON
+    def test_use_decimal_type_does_not_widen_it(self):
+        import pyarrow
+        assert arrow_type_from_analyze_type('vector', use_decimal_type=True) == pyarrow.list_(
+            pyarrow.float32()
+        )
+
+    def test_aggregation_is_refused(self):
+        # The P1 gate: Table Explorer must open a vector column without emitting SUM().
+        # agg_type() defaults everything outside its group list to 'sum', so the
+        # declaration has to refuse rather than rely on that default.
+        declared = DTYPES['vector']
+        assert declared.aggregatable is False
+        assert declared.default_agg is None
+        with pytest.raises(UnsupportedDtype) as exc_info:
+            require_dtype_capability('vector', 'default_agg', 'test')
+        assert exc_info.value.capability == 'default_agg'
+
+    def test_profiling_is_refused_on_cost(self):
+        # Not leakage -- profiling's value pass is gated to text|int, so it cannot return
+        # raw embeddings. COUNT(DISTINCT) over 1536-float arrays is the problem: a full
+        # scan of the widest column in the table for a cardinality nobody asked for.
+        assert DTYPES['vector'].profilable == 'none'
+        with pytest.raises(UnsupportedDtype) as exc_info:
+            require_dtype_capability('vector', 'profilable', 'test')
+        assert exc_info.value.capability == 'profilable'
+
+    def test_it_is_not_a_join_key(self):
+        # Equality over 1536 floats is not an identity, and the backend join enum must
+        # never offer it.
+        assert DTYPES['vector'].joinable_as_key is False
+        with pytest.raises(UnsupportedDtype):
+            require_dtype_capability('vector', 'joinable_as_key', 'test')
+
+    def test_it_is_representable_everywhere_it_claims_to_be(self):
+        declared = DTYPES['vector']
+        assert declared.arrow is True
+        assert declared.sqlalchemy is True
+        assert declared.pandas == 'object'
+
+
+class TestArrowSpecialCasesResolveFirst:
+    """Every branch in arrow_type_from_analyze_type tests the canonical dtype.
+
+    It used to test the raw spelling, so a source spelling that resolved to a
+    special-cased dtype was admitted and then fell through to the generic pandas path.
+    Three instances, all the same defect: 'ARRAY<FLOAT>' (sc-30352's own), and 'date(%Y)'
+    and 'bson', which were already wrong on master.
+    """
+
+    @_REQUIRES_JSON
+    @pytest.mark.parametrize('spelling', ["date(%Y)", "date(%Y-%m-%d)", 'date'])
+    def test_date_spellings_are_date64(self, spelling):
+        # Master gave timestamp[s] for the parenthesised forms type guessing emits: the
+        # date branch matched only the bare 'date'.
+        assert analyze_type(spelling) == 'date'
+        assert str(arrow_type_from_analyze_type(spelling)) == 'date64[ms]'
+
+    @_REQUIRES_JSON
+    @pytest.mark.parametrize('spelling', ['bson', 'bson_document', 'jsonb', 'json'])
+    def test_json_spellings_are_arrow_json(self, spelling):
+        # Master gave string() for 'bson': the branch was key.startswith('json'), which a
+        # bson spelling does not satisfy even though it resolves to json.
+        assert analyze_type(spelling) == 'json'
+        assert str(arrow_type_from_analyze_type(spelling)) == 'extension<arrow.json>'
+
+    @_REQUIRES_JSON
+    def test_currency_is_not_confused_with_its_source_spelling(self):
+        # The one dtype where the canonical and source readings differ: DTYPES declares
+        # 'currency', so resolution stops there rather than inferring 'numeric'.
+        import pyarrow
+        assert analyze_type('currency') == 'numeric'
+        assert arrow_type_from_analyze_type('currency') == pyarrow.decimal128(18, 4)
 
 
 class TestAdmitDtype:
@@ -675,25 +828,44 @@ class TestRequireDtypeCapability:
 
 
 class TestHalfAddedDtype:
-    """The state 30352 passes through: an _ANALYZE_TYPE row landing before a DTYPES row."""
+    """An _ANALYZE_TYPE row landing before its DTYPES row.
+
+    The sentinel was 'vector' until sc-30352 declared it, at which point both tests
+    resolved cleanly and stopped testing anything. It has to be a dtype no DTYPES row
+    declares, so it is asserted undeclared rather than left to rot again.
+    """
+
+    SENTINEL = 'not_yet_declared'
+
+    def test_the_sentinel_is_genuinely_undeclared(self):
+        assert self.SENTINEL not in DTYPES
 
     def test_spelling_resolving_to_an_undeclared_dtype_is_refused(self):
         # Was: DTYPES[_ANALYZE_TYPE(key)] raised a plain KeyError straight through
         # `except RegexMapKeyError`, which does not catch its own parent class -- so the
         # boundary leaked the exact exception type it exists to stop.
-        half_added = mock.patch.object(type_conversion, '_ANALYZE_TYPE', lambda key: 'vector')
+        half_added = mock.patch.object(
+            type_conversion, '_ANALYZE_TYPE', lambda key: self.SENTINEL
+        )
         with half_added, pytest.raises(UnsupportedDtype) as exc_info:
             admit_dtype('embedding', 'test')
         assert exc_info.value.dtype == 'embedding'
 
     def test_the_leaked_error_is_not_a_key_error(self):
-        with mock.patch.object(type_conversion, '_ANALYZE_TYPE', lambda key: 'vector'):
+        with mock.patch.object(
+            type_conversion, '_ANALYZE_TYPE', lambda key: self.SENTINEL
+        ):
             try:
                 admit_dtype('embedding', 'test')
             except KeyError:
                 pytest.fail('a half-added dtype must not surface as KeyError')
             except UnsupportedDtype:
                 pass
+
+    def test_both_vector_rows_landed_together(self):
+        # The hazard this class exists for, checked on the dtype that introduced it.
+        assert type_conversion._ANALYZE_TYPE('array<float>') == 'vector'
+        assert 'vector' in DTYPES
 
 
 class TestMissingDtype:
@@ -746,6 +918,9 @@ class TestCapabilityStates:
         ('varchar', 'joinable_as_key'),
         ('text', 'aggregatable'),
         ('bitmap', 'profilable'),
+        ('vector', 'joinable_as_key'),
+        ('vector', 'default_agg'),
+        ('vector', 'profilable'),
     ])
     def test_unavailable_capability_refuses(self, dtype, capability):
         with pytest.raises(UnsupportedDtype) as exc_info:

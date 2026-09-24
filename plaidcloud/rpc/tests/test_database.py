@@ -25,6 +25,7 @@ from plaidcloud.rpc.database import (
     PlaidUnicode,
     PlaidJSON,
     PlaidTinyInt,
+    PlaidVector,
     text_repr,
     is_dialect_sql_server_based,
     is_dialect_postgresql_based,
@@ -510,6 +511,82 @@ class TestPlaidBitmapDialect:
         pb = PlaidBitmap()
         impl = pb.load_dialect_impl(PGDialect())
         assert impl is pb.impl
+
+
+class TestPlaidVectorDialect:
+    """PlaidVector is the one type here that refuses an unwired dialect.
+
+    Every other Plaid* type degrades to its base `impl` off its native engine, which is
+    right for a narrowing (NVARCHAR for STRING) and wrong for a vector: VARBINARY or
+    text would accept the DDL, accept the writes, and only surface as nonsense once a
+    similarity query ran. PlaidGeometry/PlaidGeography raise, but behind a class-level
+    `# pragma: no cover` and pinned by no test, so the refusal is pinned here instead.
+    """
+
+    @pytest.mark.skipif(StarRocksDialect is None, reason="starrocks not installed")
+    def test_starrocks_emits_array_of_float(self):
+        # The measured-correct representation: bit-exact float32 round trip at 768 and
+        # 1536 dims on StarRocks 4.1.3, and a spec-conformant LIST<float> on unload.
+        assert PlaidVector().compile(dialect=StarRocksDialect()) == 'ARRAY<FLOAT>'
+
+    @pytest.mark.skipif(StarRocksDialect is None, reason="starrocks not installed")
+    def test_starrocks_load_dialect_impl_is_the_real_type(self):
+        impl = PlaidVector().load_dialect_impl(StarRocksDialect())
+        assert impl.get_col_spec() == 'ARRAY<FLOAT>'
+
+    @pytest.mark.parametrize('dialect_factory', [PGDialect, MSDialect, MySQLDialect])
+    def test_unwired_dialects_refuse(self, dialect_factory):
+        # MySQLDialect is the sharpest of the three: StarRocksDialect subclasses it, so a
+        # dialect check loose enough to be an isinstance of the parent would pass here.
+        from plaidcloud.rpc.type_conversion import UnsupportedDtype
+        dialect = dialect_factory()
+        with pytest.raises(UnsupportedDtype) as exc_info:
+            PlaidVector().load_dialect_impl(dialect)
+        assert exc_info.value.dtype == 'vector'
+        assert exc_info.value.dialect == dialect.name
+        assert f'not available on the {dialect.name!r} dialect' in str(exc_info.value)
+
+    @pytest.mark.parametrize('dialect_factory', [PGDialect, MSDialect, MySQLDialect])
+    def test_the_refusal_does_not_contradict_the_declaration(self, dialect_factory):
+        # The refusal used to say capability='sqlalchemy' while DTYPES['vector'].sqlalchemy
+        # is True, so a caller reading both got opposite answers. The unavailable thing is
+        # the dialect, and only the dialect.
+        from plaidcloud.rpc.type_conversion import DTYPES, UnsupportedDtype
+        assert DTYPES['vector'].sqlalchemy is True
+        with pytest.raises(UnsupportedDtype) as exc_info:
+            PlaidVector().load_dialect_impl(dialect_factory())
+        assert exc_info.value.capability is None
+        assert 'capable' not in str(exc_info.value)
+
+    def test_select_compilation_refuses_too(self):
+        # load_dialect_impl fires while compiling a SELECT, not only DDL, and a bare
+        # str(query) compiles on the 'default' dialect -- which the message names for what
+        # it is rather than implying a 'default' engine exists.
+        import sqlalchemy
+
+        from plaidcloud.rpc.type_conversion import UnsupportedDtype
+        table = sqlalchemy.Table(
+            'embeddings', sqlalchemy.MetaData(),
+            sqlalchemy.Column('embedding', PlaidVector()),
+        )
+        with pytest.raises(UnsupportedDtype) as exc_info:
+            str(sqlalchemy.select(table.c.embedding).where(table.c.embedding.is_(None)))
+        assert exc_info.value.dialect == 'default'
+        assert 'without a bound engine' in str(exc_info.value)
+
+    def test_the_refusal_is_a_value_error_not_a_stub(self):
+        # NotImplementedError is what PlaidGeometry raises; a caller cannot tell it from
+        # an unrelated stub, and coverage excludes the line so nothing pins it.
+        from plaidcloud.rpc.type_conversion import UnsupportedDtype
+        with pytest.raises(ValueError) as exc_info:
+            PlaidVector().load_dialect_impl(PGDialect())
+        assert isinstance(exc_info.value, UnsupportedDtype)
+
+    def test_ddl_generation_refuses_rather_than_degrading(self):
+        # The path that matters: a CREATE TABLE must not quietly emit the base impl.
+        from plaidcloud.rpc.type_conversion import UnsupportedDtype
+        with pytest.raises(UnsupportedDtype):
+            PlaidVector().compile(dialect=PGDialect())
 
 
 class TestStartPath:

@@ -32,6 +32,11 @@ try:
     from databend_sqlalchemy import databend_dialect
 except ImportError:  # pragma: no cover
     databend_dialect = None
+try:
+    from starrocks.datatype import ARRAY as StarRocksArray
+    from starrocks.datatype import FLOAT as StarRocksFloat
+except ImportError:  # pragma: no cover
+    StarRocksArray = StarRocksFloat = None
 
 from plaidcloud.rpc import config
 
@@ -309,6 +314,55 @@ class PlaidGeography(TypeDecorator):  # pragma: no cover - requires databend
             raise NotImplementedError('PlaidGeography is only supported on Databend')
 
         return self.impl
+
+
+class PlaidVector(TypeDecorator):
+    """Fixed-width float32 embedding column. StarRocks only.
+
+    ARRAY<FLOAT> is the measured-correct StarRocks representation: on StarRocks 4.1.3
+    an Iceberg ARRAY<FLOAT> column round-trips bit-exact IEEE-754 float32 at 768 and
+    1536 dimensions, keeps an empty array and NULL distinct, and native Parquet unload
+    emits a spec-conformant LIST<float>. Dimension is column metadata enforced at write
+    time, not part of the type, so one unparameterized `vector` covers every width.
+    Reading a whole vector column back over MCP/RPC yields a text rendering of the
+    array; element access is precise.
+
+    Unlike every other type here, an unwired dialect is refused rather than degraded to
+    `impl`: a vector silently landing as VARBINARY or text is a wrong column, not a
+    lesser one, and it would be discovered only once a similarity query returned
+    nonsense. Note the refusal is not confined to DDL -- SQLAlchemy calls
+    `load_dialect_impl` while compiling a SELECT too, so `str(select(vector_col))`
+    raises, and on the default dialect a bare `str(query)` does the same.
+    """
+    impl = StarRocksArray(StarRocksFloat) if StarRocksArray else None  # type: ignore
+    cache_ok = True
+
+    def load_dialect_impl(self, dialect):
+        """Loads the dialect implementation
+
+        Args:
+            dialect (Dialect): SQLAlchemy dialect
+        Returns:
+            str: Type Descriptor
+        Raises:
+            UnsupportedDtype: on any dialect but StarRocks, carrying `.dialect`
+        """
+        if StarRocksArray is None or not is_dialect_starrocks_based(dialect):
+            # Fails closed on both halves: no starrocks installed is as unusable as the
+            # wrong dialect, and leaving it to `impl` would hand back NullType().
+            # Deferred import: type_conversion imports this module, so importing its
+            # refusal at module scope would be circular.
+            from plaidcloud.rpc.type_conversion import UnsupportedDtype
+            asked_by = 'PlaidVector'
+            if dialect.name == 'default':
+                # What `str(query)` compiles against -- not a real target, so say so
+                # rather than leave a reader hunting for a 'default' engine.
+                asked_by = 'PlaidVector, compiling without a bound engine'
+            raise UnsupportedDtype('vector', asked_by, dialect=dialect.name)
+
+        # One shared immutable ARRAY<FLOAT>, adapted the way the sibling StarRocks
+        # branches adapt theirs.
+        return dialect.type_descriptor(self.impl)
 
 
 @functools.lru_cache(maxsize=1)
