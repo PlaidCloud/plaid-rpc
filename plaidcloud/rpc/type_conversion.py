@@ -201,10 +201,18 @@ class Dtype(NamedTuple):
 # included: default_agg mirrors table_explorer_common.agg_type(), which groups
 # only text/boolean/date/timestamp/time, so interval/json/uuid/largebinary
 # default to 'sum'. profilable mirrors table.py's _PROFILE_* sets, and
-# joinable_as_key mirrors frame_join_multi_validator._DTYPE_ENUM.
+# joinable_as_key mirrors the join gate's EFFECTIVE admission, which is wider than any
+# one data structure: frame_join_multi_validator._DTYPE_ENUM is only its FAST path, and
+# _dtype_ok falls back to accepting anything sqlalchemy_from_dtype resolves. sc-30345
+# mirrored the enum alone and so narrowed 'varchar', 'geometry' and 'geography' from
+# accepted to refused; that validator runs at EXECUTE time, so workflows saved before
+# the deploy would have broken (sc-30348). Declared back to the effective set here.
+# 'bitmap' stays un-joinable: it is the one declared dtype the fallback also refuses.
+# 'vector' stays un-joinable because it is NEW -- it has no prior behaviour to preserve,
+# and array equality over 1536 floats is not an identity.
 DTYPES: Mapping[str, Dtype] = MappingProxyType({
     'text': Dtype(pandas='object', default_agg='group', profilable='values'),
-    'varchar': Dtype(pandas='object', joinable_as_key=False, profilable='values'),
+    'varchar': Dtype(pandas='object', profilable='values'),
     'boolean': Dtype(pandas='bool', default_agg='group'),
     'tinyint': Dtype(pandas='Int8', aggregatable=True, profilable='values'),
     'smallint': Dtype(pandas='Int16', aggregatable=True, profilable='values'),
@@ -228,10 +236,8 @@ DTYPES: Mapping[str, Dtype] = MappingProxyType({
         pandas=None, arrow=False, sqlalchemy=False,
         joinable_as_key=False, profilable='none',
     ),
-    'geometry': Dtype(
-        pandas=None, arrow=False, joinable_as_key=False, profilable='none',
-    ),
-    'geography': Dtype(pandas=None, arrow=False, joinable_as_key=False),
+    'geometry': Dtype(pandas=None, arrow=False, profilable='none'),
+    'geography': Dtype(pandas=None, arrow=False),
     # A float32 embedding, unparameterized by dimension. New, so nothing existing is
     # preserved here: every axis is declared to what is correct rather than to today's
     # behaviour. pandas='object' is what a column of numpy float32 arrays actually is in
@@ -336,6 +342,16 @@ def require_dtype_capability(dtype, capability: str, context: str) -> Dtype:
     return declared
 
 
+# The dtypes a `use_decimal_type` caller stages as an exact decimal instead of a float.
+# Listed by name: the test used to be `pandas_dtype_from_sql(key) == 'float64'`, which
+# swept in 'double' and 'float' -- genuine IEEE types -- and declared a column of Python
+# floats to be decimal128(38, 10), so pa.Table.from_pylist refused the data. A dtype
+# earns decimal staging by appearing here, never by happening to be float64. 'currency'
+# is absent because it is decimal at its own 18,4 scale regardless of the flag, and
+# returns before this is consulted.
+_DECIMAL_DTYPES = frozenset({'numeric', 'decimal'})
+
+
 def arrow_type_from_analyze_type(dtype: str, use_decimal_type: bool = False):
     """Returns an arrow/parquet type given an analyze type
 
@@ -385,7 +401,7 @@ def arrow_type_from_analyze_type(dtype: str, use_decimal_type: bool = False):
     if np_type == 'object':
         # Fall back to string
         return string()
-    if use_decimal_type and np_type == 'float64':
+    if use_decimal_type and key in _DECIMAL_DTYPES:
         return decimal128(38, 10)
     return from_numpy_dtype(np_type.lower())
 
