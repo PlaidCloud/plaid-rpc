@@ -462,6 +462,64 @@ class TestArrowTypeFromAnalyzeType:
                 arrow_type_from_analyze_type('text')
 
 
+class TestArrowTypeForNumericDtypes:
+    """The staged arrow type for every numeric dtype, at both `use_decimal_type` values.
+
+    Missing when sc-30345 routed `pandas_dtype_from_sql` through DTYPES, which is why a
+    regression that turned 'double' and 'float' into decimal128 shipped: no test named
+    what these six stage as, so nothing went red (sc-30354).
+    """
+
+    @_REQUIRES_JSON
+    @pytest.mark.parametrize('dtype,use_decimal_type,expected', [
+        # IEEE floating point either way -- the flag narrows exact decimals, not floats.
+        ('double', False, 'float64'),
+        ('double', True, 'float64'),
+        ('float', False, 'float64'),
+        ('float', True, 'float64'),
+        # The exact-decimal dtype the flag exists for.
+        ('numeric', False, 'float64'),
+        ('numeric', True, 'decimal128(38, 10)'),
+        # Stored money: always its own 18,4 scale, flag or no flag.
+        ('currency', False, 'decimal128(18, 4)'),
+        ('currency', True, 'decimal128(18, 4)'),
+        # Auto-incrementing integers. Both raised TypeError out of numpy before
+        # sc-30345; int64 is the fix, and stays the fix under either flag.
+        ('serial', False, 'int64'),
+        ('serial', True, 'int64'),
+        ('bigserial', False, 'int64'),
+        ('bigserial', True, 'int64'),
+    ])
+    def test_arrow_type_matrix(self, dtype, use_decimal_type, expected):
+        import pyarrow
+        expected_type = {
+            'float64': pyarrow.float64(),
+            'int64': pyarrow.int64(),
+            'decimal128(38, 10)': pyarrow.decimal128(38, 10),
+            'decimal128(18, 4)': pyarrow.decimal128(18, 4),
+        }[expected]
+        assert arrow_type_from_analyze_type(dtype, use_decimal_type) == expected_type
+
+    def test_every_decimal_dtype_is_declared(self):
+        # Nothing else enforces the relationship the set claims. A typo -- 'numberic'
+        # -- would silently stop coercing `numeric` to a decimal, and every other test
+        # here would still pass, because a name that is in no branch just falls through
+        # to the float path. One line, and the set can no longer drift off the registry.
+        assert type_conversion._DECIMAL_DTYPES <= set(DTYPES)
+
+    @_REQUIRES_JSON
+    @pytest.mark.parametrize('dtype', ['double', 'float'])
+    @pytest.mark.parametrize('use_decimal_type', [False, True])
+    def test_float_dtypes_are_never_decimal(self, dtype, use_decimal_type):
+        # Was: decimal128(38, 10) under use_decimal_type, because the branch tested
+        # `pandas_dtype_from_sql(key) == 'float64'`. A decimal schema over Python floats
+        # makes pa.Table.from_pylist raise 'int or Decimal object expected, got float'.
+        import pyarrow
+        staged = arrow_type_from_analyze_type(dtype, use_decimal_type)
+        assert not pyarrow.types.is_decimal(staged)
+        assert pyarrow.types.is_floating(staged)
+
+
 class TestArrowTypeMocked:
     """Tests with a mocked pyarrow module that provides all needed symbols."""
 
@@ -582,16 +640,54 @@ class TestDtypeRegistry:
         if declared.aggregatable:
             assert declared.default_agg == 'sum'
 
+    # plaid-utilities frame_join_multi_validator._DTYPE_ENUM, hand-kept in at least two
+    # other repos. It is only `_dtype_ok`'s FAST path -- the gate then falls back to
+    # accepting anything `sqlalchemy_from_dtype` resolves -- so it is NOT the gate's
+    # admission set, and mirroring it alone is what narrowed three dtypes (sc-30348).
+    _JOIN_FAST_PATH_ENUM = frozenset({
+        'text', 'integer', 'bigint', 'smallint', 'tinyint', 'numeric', 'decimal',
+        'float', 'double', 'boolean', 'currency', 'date', 'timestamp', 'time',
+        'interval', 'json', 'uuid', 'serial', 'bigserial', 'largebinary',
+    })
+
     def test_registry_covers_the_backend_join_enum(self):
-        # plaid-utilities frame_join_multi_validator._DTYPE_ENUM, which is hand-kept
-        # in at least two other repos. A dtype it admits must be declared joinable.
-        join_enum = {
-            'text', 'integer', 'bigint', 'smallint', 'tinyint', 'numeric', 'decimal',
-            'float', 'double', 'boolean', 'currency', 'date', 'timestamp', 'time',
-            'interval', 'json', 'uuid', 'serial', 'bigserial', 'largebinary',
+        # A dtype the fast path admits must be declared joinable.
+        assert self._JOIN_FAST_PATH_ENUM <= set(DTYPES)
+        assert self._JOIN_FAST_PATH_ENUM <= {
+            d for d in DTYPES if DTYPES[d].joinable_as_key
         }
-        assert join_enum <= set(DTYPES)
-        assert {d for d in DTYPES if DTYPES[d].joinable_as_key} == join_enum
+
+    def test_join_key_admission_is_the_gates_effective_set(self):
+        # The pin sc-30345 needed and did not have. `_dtype_ok` accepted a dtype if it
+        # was in the fast-path enum OR `sqlalchemy_from_dtype` resolved it, so the
+        # effective admission is the union -- which is how 'varchar', 'geometry' and
+        # 'geography' were accepted, and how declaring only the enum silently narrowed
+        # them to refused at EXECUTE time, breaking already-saved workflows.
+        resolves_a_sqlalchemy_type = set()
+        for dtype in DTYPES:
+            try:
+                sqlalchemy_from_dtype(dtype)
+            except UnsupportedDtype:
+                continue
+            resolves_a_sqlalchemy_type.add(dtype)
+        effective = self._JOIN_FAST_PATH_ENUM | resolves_a_sqlalchemy_type
+        declared = {d for d in DTYPES if DTYPES[d].joinable_as_key}
+
+        # 'vector' is the one deliberate exclusion: it postdates the gate, so it has no
+        # prior behaviour to preserve, and array equality over 1536 floats is not an
+        # identity. Whether a 'geometry' join SHOULD be allowed is a separate deliberate
+        # story; this test pins what the gate did, not what it ought to do.
+        assert effective - declared == {'vector'}
+        assert declared - effective == set()
+        # Named explicitly, so a narrowing cannot pass by both sides moving together.
+        assert declared == {
+            'text', 'varchar', 'integer', 'bigint', 'smallint', 'tinyint', 'numeric',
+            'decimal', 'float', 'double', 'boolean', 'currency', 'date', 'timestamp',
+            'time', 'interval', 'json', 'uuid', 'serial', 'bigserial', 'largebinary',
+            'geometry', 'geography',
+        }
+        # 'bitmap' is the only declared dtype neither route admits.
+        assert set(DTYPES) - declared == {'bitmap', 'vector'}
 
     def test_registry_is_exactly_the_picklist_plus_what_inference_emits(self):
         # PlaidClient Constants.js ANALYZE_DATA_TYPES, and the 14 dtypes analyze_type
@@ -904,6 +1000,10 @@ class TestCapabilityStates:
         ('text', 'arrow'),
         ('text', 'sqlalchemy'),
         ('text', 'joinable_as_key'),
+        # sc-30348: restored to the join gate's effective prior admission.
+        ('varchar', 'joinable_as_key'),
+        ('geometry', 'joinable_as_key'),
+        ('geography', 'joinable_as_key'),
         ('numeric', 'aggregatable'),
         ('text', 'default_agg'),
         ('text', 'profilable'),
@@ -915,7 +1015,6 @@ class TestCapabilityStates:
         ('uuid', 'pandas'),
         ('uuid', 'arrow'),
         ('bitmap', 'sqlalchemy'),
-        ('varchar', 'joinable_as_key'),
         ('text', 'aggregatable'),
         ('bitmap', 'profilable'),
         ('vector', 'joinable_as_key'),
