@@ -172,7 +172,10 @@ class TestPandasDtypeFromSql:
         assert exc_info.value.dtype == 'unknown_type'
         assert exc_info.value.capability is None
 
-    @pytest.mark.parametrize('dtype', ['uuid', 'bitmap', 'geometry', 'geography'])
+    def test_uuid_is_object(self):
+        assert pandas_dtype_from_sql('uuid') == 'object'
+
+    @pytest.mark.parametrize('dtype', ['bitmap', 'geometry', 'geography'])
     def test_unrepresentable_is_refused(self, dtype):
         with pytest.raises(UnsupportedDtype) as exc_info:
             pandas_dtype_from_sql(dtype)
@@ -432,10 +435,15 @@ class TestArrowTypeFromAnalyzeType:
         assert arrow_type_from_analyze_type('currency', use_decimal_type=True) == pyarrow.decimal128(18, 4)
 
     @_REQUIRES_JSON
-    @pytest.mark.parametrize('dtype', ['uuid', 'geometry', 'bitmap'])
+    def test_uuid_is_string(self):
+        # Postgres uuid columns (every Twenty CRM table) must stage to Parquet; 1.16.0
+        # refused them and <=1.15.1 raised numpy's `data type 'uuid' not understood`.
+        import pyarrow
+        assert arrow_type_from_analyze_type('uuid') == pyarrow.string()
+
+    @_REQUIRES_JSON
+    @pytest.mark.parametrize('dtype', ['geometry', 'geography', 'bitmap'])
     def test_dtype_without_an_arrow_representation_is_refused(self, dtype):
-        # Was: numpy's `TypeError: data type 'uuid' not understood`, which names
-        # neither the column nor plaid's dtype.
         with pytest.raises(UnsupportedDtype) as exc_info:
             arrow_type_from_analyze_type(dtype)
         assert exc_info.value.capability == 'arrow'
@@ -1012,8 +1020,8 @@ class TestCapabilityStates:
         assert require_dtype_capability(dtype, capability, 'test') is DTYPES[dtype]
 
     @pytest.mark.parametrize('dtype,capability', [
-        ('uuid', 'pandas'),
-        ('uuid', 'arrow'),
+        ('geometry', 'pandas'),
+        ('geometry', 'arrow'),
         ('bitmap', 'sqlalchemy'),
         ('text', 'aggregatable'),
         ('bitmap', 'profilable'),
@@ -1140,8 +1148,8 @@ class TestRefusalMessages:
             admit_dtype(None, 'test')
 
     def test_capability_on_a_canonical_dtype(self):
-        with pytest.raises(UnsupportedDtype, match=r"dtype 'uuid': not pandas-capable \(asked by test\)"):
-            require_dtype_capability('uuid', 'pandas', 'test')
+        with pytest.raises(UnsupportedDtype, match=r"dtype 'geometry': not pandas-capable \(asked by test\)"):
+            require_dtype_capability('geometry', 'pandas', 'test')
 
     def test_capability_on_a_source_spelling(self):
         with pytest.raises(UnsupportedDtype, match="a source type spelling for 'text'"):

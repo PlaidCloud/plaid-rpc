@@ -230,7 +230,9 @@ DTYPES: Mapping[str, Dtype] = MappingProxyType({
     'timestamp': Dtype(pandas='datetime64[s]', default_agg='group'),
     'interval': Dtype(pandas='timedelta64[s]'),
     'json': Dtype(pandas='object', profilable='none'),
-    'uuid': Dtype(pandas=None, arrow=False),
+    # Staged as its canonical hyphenated string: Arrow's own arrow.uuid extension is
+    # 16-byte fixed binary, which no engine we land into reads back as a uuid.
+    'uuid': Dtype(pandas='object'),
     'largebinary': Dtype(pandas='object', profilable='none'),
     'bitmap': Dtype(
         pandas=None, arrow=False, sqlalchemy=False,

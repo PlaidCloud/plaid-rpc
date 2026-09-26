@@ -8,6 +8,6 @@ requests
 requests-futures
 setuptools
 orjson
-SQLAlchemy
+SQLAlchemy<2.1  # 2.1 renamed ORMSelectCompileState; snowflake-sqlalchemy breaks at import
 toolz
 urllib3
