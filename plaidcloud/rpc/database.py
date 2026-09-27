@@ -20,7 +20,8 @@ import csv
 from operator import attrgetter
 
 from sqlalchemy.types import (TypeDecorator, DateTime, Unicode, CHAR, NVARCHAR, VARCHAR, UnicodeText, NUMERIC,
-                              TIMESTAMP, DATETIME, JSON, SMALLINT, VARBINARY, DECIMAL, String, UserDefinedType)
+                              TIMESTAMP, DATETIME, JSON, SMALLINT, VARBINARY, DECIMAL, FLOAT, String,
+                              UserDefinedType)
 
 
 import sqlalchemy
@@ -333,8 +334,33 @@ class SnowflakeVector(UserDefinedType):
         return f'VECTOR(FLOAT, {self.dimension})'
 
 
+@functools.lru_cache(maxsize=1)
+def _databricks_array_of_float():
+    """Databricks' `ARRAY<FLOAT>` -- the only element type its vector builtins accept.
+
+    🚨 FLOAT, not `Float`/`Double`. `vector_cosine_similarity` and `vector_l2_distance`
+    take `ARRAY<FLOAT>` and error on `ARRAY<DOUBLE>` or `ARRAY<DECIMAL>`, and
+    SQLAlchemy's `Double` renders `ARRAY<DOUBLE>` on this dialect -- a column that
+    accepts every write and then fails every similarity query.
+
+    Subclassed rather than used directly because databricks-sqlalchemy leaves
+    `DatabricksArray.cache_ok` unset, which makes every statement carrying a vector
+    column uncacheable and emits a SAWarning. Memoized for stable class identity, the
+    same reason the JSON variants above are.
+    """
+    from databricks.sqlalchemy import DatabricksArray
+
+    class ArrayOfFloat(DatabricksArray):
+        cache_ok = True
+
+        def __init__(self):
+            super().__init__(FLOAT)
+
+    return ArrayOfFloat
+
+
 class PlaidVector(TypeDecorator):
-    """Fixed-width float32 embedding column. StarRocks and Snowflake.
+    """Fixed-width float32 embedding column. StarRocks, Snowflake and Databricks.
 
     ARRAY<FLOAT> is the measured-correct StarRocks representation: on StarRocks 4.1.3
     an Iceberg ARRAY<FLOAT> column round-trips bit-exact IEEE-754 float32 at 768 and
@@ -343,6 +369,12 @@ class PlaidVector(TypeDecorator):
     time, not part of the type, so one unparameterized `vector` covers every width.
     Reading a whole vector column back over MCP/RPC yields a text rendering of the
     array; element access is precise.
+
+    Databricks is the same shape as StarRocks and for the same reason: its column type is
+    a bare `ARRAY<FLOAT>` and the width is metadata, so one unparameterized `vector`
+    covers every width there too. The element type is not interchangeable, though --
+    `vector_cosine_similarity`/`vector_l2_distance` accept `ARRAY<FLOAT>` and error on
+    `ARRAY<DOUBLE>`, so the arm names FLOAT explicitly (`_databricks_array_of_float`).
 
     Snowflake is the one exception to that, and it is the engine's, not ours: its
     native type IS parameterized -- `VECTOR(FLOAT, n)` -- so a Snowflake vector column
@@ -376,7 +408,7 @@ class PlaidVector(TypeDecorator):
         Returns:
             str: Type Descriptor
         Raises:
-            UnsupportedDtype: on any dialect but StarRocks and Snowflake, carrying `.dialect`
+            UnsupportedDtype: on any dialect but StarRocks, Snowflake and Databricks, carrying `.dialect`
             ValueError: on Snowflake when no width is declared
         """
         if is_dialect_snowflake_based(dialect):
@@ -388,6 +420,12 @@ class PlaidVector(TypeDecorator):
                     "column's Vector Width and create the table again."
                 )
             return dialect.type_descriptor(SnowflakeVector(self.dimension))
+
+        if is_dialect_databricks_based(dialect):
+            # Shaped like the StarRocks arm below, not the Snowflake one: a declared width
+            # is deliberately NOT recorded in Databricks DDL either, because the type does
+            # not carry one and the width is enforced on write.
+            return dialect.type_descriptor(_databricks_array_of_float())
 
         if StarRocksArray is None or not is_dialect_starrocks_based(dialect):
             # Fails closed on both halves: no starrocks installed is as unusable as the
@@ -414,7 +452,8 @@ class PlaidVectorOfWidth(PlaidVector):
 
     Built at the point DDL is emitted, from the column's stored `vector_dimension`.
     Compiles identically to `PlaidVector` on every dialect but Snowflake, which is the
-    only one whose type carries the width.
+    only one whose type carries the width -- StarRocks and Databricks both store a bare
+    array and keep the width as metadata.
     """
     cache_ok = True
 
