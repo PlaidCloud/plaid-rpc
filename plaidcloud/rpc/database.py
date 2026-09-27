@@ -316,8 +316,25 @@ class PlaidGeography(TypeDecorator):  # pragma: no cover - requires databend
         return self.impl
 
 
+class SnowflakeVector(UserDefinedType):
+    """Snowflake's native `VECTOR(FLOAT, n)`.
+
+    snowflake-sqlalchemy ships no VECTOR type, so the column spec is emitted here.
+    The width is part of the TYPE on Snowflake -- unlike StarRocks' bare
+    ARRAY<FLOAT>, where it is column metadata -- so an instance always carries one.
+    """
+    cache_ok = True
+
+    def __init__(self, dimension: int):
+        super().__init__()
+        self.dimension = dimension
+
+    def get_col_spec(self, **kw):  # pylint: disable=unused-argument
+        return f'VECTOR(FLOAT, {self.dimension})'
+
+
 class PlaidVector(TypeDecorator):
-    """Fixed-width float32 embedding column. StarRocks only.
+    """Fixed-width float32 embedding column. StarRocks and Snowflake.
 
     ARRAY<FLOAT> is the measured-correct StarRocks representation: on StarRocks 4.1.3
     an Iceberg ARRAY<FLOAT> column round-trips bit-exact IEEE-754 float32 at 768 and
@@ -326,6 +343,14 @@ class PlaidVector(TypeDecorator):
     time, not part of the type, so one unparameterized `vector` covers every width.
     Reading a whole vector column back over MCP/RPC yields a text rendering of the
     array; element access is precise.
+
+    Snowflake is the one exception to that, and it is the engine's, not ours: its
+    native type IS parameterized -- `VECTOR(FLOAT, n)` -- so a Snowflake vector column
+    cannot be created without a width. The dtype vocabulary stays unparameterized
+    anyway (epic 30343 D2): `vector` is still one dtype covering every width, and the
+    width reaches the type from the column's stored `vector_dimension` at the point DDL
+    is emitted, carried by `PlaidVectorOfWidth`. A bare `PlaidVector` on Snowflake
+    refuses rather than guessing a width.
 
     Unlike every other type here, an unwired dialect is refused rather than degraded to
     `impl`: a vector silently landing as VARBINARY or text is a wrong column, not a
@@ -337,6 +362,12 @@ class PlaidVector(TypeDecorator):
     impl = StarRocksArray(StarRocksFloat) if StarRocksArray else None  # type: ignore
     cache_ok = True
 
+    #: The declared width, or None for the unparameterized type every engine but
+    #: Snowflake uses. A class attribute rather than a constructor argument: making
+    #: `PlaidVector` itself take a width would parameterize the dtype for engines that
+    #: do not have one, which D2 decided against. `PlaidVectorOfWidth` sets it.
+    dimension = None
+
     def load_dialect_impl(self, dialect):
         """Loads the dialect implementation
 
@@ -345,8 +376,19 @@ class PlaidVector(TypeDecorator):
         Returns:
             str: Type Descriptor
         Raises:
-            UnsupportedDtype: on any dialect but StarRocks, carrying `.dialect`
+            UnsupportedDtype: on any dialect but StarRocks and Snowflake, carrying `.dialect`
+            ValueError: on Snowflake when no width is declared
         """
+        if is_dialect_snowflake_based(dialect):
+            if self.dimension is None:
+                raise ValueError(
+                    'A vector column on Snowflake must declare a Vector Dimension before it '
+                    'can be created: Snowflake holds the width in the column type itself '
+                    '(VECTOR(FLOAT, n)), unlike StarRocks, which stores a bare array. Set the '
+                    "column's Vector Width and create the table again."
+                )
+            return dialect.type_descriptor(SnowflakeVector(self.dimension))
+
         if StarRocksArray is None or not is_dialect_starrocks_based(dialect):
             # Fails closed on both halves: no starrocks installed is as unusable as the
             # wrong dialect, and leaving it to `impl` would hand back NullType().
@@ -361,8 +403,24 @@ class PlaidVector(TypeDecorator):
             raise UnsupportedDtype('vector', asked_by, dialect=dialect.name)
 
         # One shared immutable ARRAY<FLOAT>, adapted the way the sibling StarRocks
-        # branches adapt theirs.
+        # branches adapt theirs. A width, if one was declared, is deliberately NOT
+        # recorded in StarRocks DDL: the measured representation is a bare ARRAY<FLOAT>
+        # and the width is enforced on write.
         return dialect.type_descriptor(self.impl)
+
+
+class PlaidVectorOfWidth(PlaidVector):
+    """A `vector` column that also knows how many numbers each of its values holds.
+
+    Built at the point DDL is emitted, from the column's stored `vector_dimension`.
+    Compiles identically to `PlaidVector` on every dialect but Snowflake, which is the
+    only one whose type carries the width.
+    """
+    cache_ok = True
+
+    def __init__(self, dimension: int):
+        super().__init__()
+        self.dimension = dimension
 
 
 @functools.lru_cache(maxsize=1)
