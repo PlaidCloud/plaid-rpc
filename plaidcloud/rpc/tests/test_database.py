@@ -26,6 +26,7 @@ from plaidcloud.rpc.database import (
     PlaidJSON,
     PlaidTinyInt,
     PlaidVector,
+    PlaidVectorOfWidth,
     text_repr,
     is_dialect_sql_server_based,
     is_dialect_postgresql_based,
@@ -587,6 +588,40 @@ class TestPlaidVectorDialect:
         from plaidcloud.rpc.type_conversion import UnsupportedDtype
         with pytest.raises(UnsupportedDtype):
             PlaidVector().compile(dialect=PGDialect())
+
+    @pytest.mark.skipif(SnowflakeDialect is None, reason="snowflake-sqlalchemy not installed")
+    def test_snowflake_emits_vector_float_of_the_declared_width(self):
+        # Snowflake's native type carries the width, so the DDL does too. 1536 is
+        # text-embedding-3-small's width and the one a vector column is most often
+        # declared at; 3 proves the number is the declaration and not a constant.
+        assert PlaidVectorOfWidth(1536).compile(dialect=SnowflakeDialect()) == 'VECTOR(FLOAT, 1536)'
+        assert PlaidVectorOfWidth(3).compile(dialect=SnowflakeDialect()) == 'VECTOR(FLOAT, 3)'
+
+    @pytest.mark.skipif(SnowflakeDialect is None, reason="snowflake-sqlalchemy not installed")
+    def test_snowflake_without_a_declared_width_refuses_by_name(self):
+        # NOT an UnsupportedDtype: `vector` IS available on Snowflake. What is missing is
+        # the column's own declaration, and the message has to say which one to set.
+        from plaidcloud.rpc.type_conversion import UnsupportedDtype
+        with pytest.raises(ValueError) as exc_info:
+            PlaidVector().compile(dialect=SnowflakeDialect())
+        assert not isinstance(exc_info.value, UnsupportedDtype)
+        assert 'must declare a Vector Dimension' in str(exc_info.value)
+
+    @pytest.mark.skipif(
+        SnowflakeDialect is None or StarRocksDialect is None,
+        reason="snowflake-sqlalchemy or starrocks not installed",
+    )
+    def test_a_declared_width_does_not_reach_starrocks_ddl(self):
+        # The width is column metadata on StarRocks, enforced on write. One Column object
+        # compiled on both engines must still produce the measured StarRocks type.
+        assert PlaidVectorOfWidth(1536).compile(dialect=StarRocksDialect()) == 'ARRAY<FLOAT>'
+
+    @pytest.mark.skipif(SnowflakeDialect is None, reason="snowflake-sqlalchemy not installed")
+    def test_a_declared_width_does_not_rescue_an_unwired_dialect(self):
+        # Carrying a width is not the same as having a representation.
+        from plaidcloud.rpc.type_conversion import UnsupportedDtype
+        with pytest.raises(UnsupportedDtype):
+            PlaidVectorOfWidth(1536).compile(dialect=PGDialect())
 
 
 class TestStartPath:
