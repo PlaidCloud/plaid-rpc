@@ -616,6 +616,29 @@ class TestPlaidVectorDialect:
         # compiled on both engines must still produce the measured StarRocks type.
         assert PlaidVectorOfWidth(1536).compile(dialect=StarRocksDialect()) == 'ARRAY<FLOAT>'
 
+    @pytest.mark.skipif(DatabricksDialect is None, reason="databricks-sqlalchemy not installed")
+    def test_databricks_emits_array_of_float(self):
+        # 🚨 FLOAT and not DOUBLE is the whole assertion. vector_cosine_similarity and
+        # vector_l2_distance accept ARRAY<FLOAT> and error on ARRAY<DOUBLE>, so an
+        # element type that widened would produce a column that takes every write and
+        # fails every search -- invisible to a DDL-succeeds test.
+        assert PlaidVector().compile(dialect=DatabricksDialect()) == 'ARRAY<FLOAT>'
+        assert 'DOUBLE' not in PlaidVector().compile(dialect=DatabricksDialect())
+
+    @pytest.mark.skipif(DatabricksDialect is None, reason="databricks-sqlalchemy not installed")
+    def test_a_declared_width_does_not_reach_databricks_ddl(self):
+        # Databricks is StarRocks-shaped, not Snowflake-shaped: the type carries no width,
+        # so one Column object compiled on both must still produce the bare array.
+        assert PlaidVectorOfWidth(1536).compile(dialect=DatabricksDialect()) == 'ARRAY<FLOAT>'
+
+    @pytest.mark.skipif(DatabricksDialect is None, reason="databricks-sqlalchemy not installed")
+    def test_a_databricks_vector_column_is_cacheable(self):
+        # databricks-sqlalchemy leaves DatabricksArray.cache_ok unset, which makes every
+        # statement carrying a vector column uncacheable and warns. The subclass says it
+        # is safe; this pins that the subclass is what ships.
+        impl = PlaidVector().load_dialect_impl(DatabricksDialect())
+        assert impl.cache_ok is True
+
     @pytest.mark.skipif(SnowflakeDialect is None, reason="snowflake-sqlalchemy not installed")
     def test_a_declared_width_does_not_rescue_an_unwired_dialect(self):
         # Carrying a width is not the same as having a representation.
