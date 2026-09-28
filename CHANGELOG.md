@@ -1,5 +1,9 @@
 # Changelog
 
+## v1.19.0
+
+- New `plaidcloud.rpc.stringtransforms` (`apply_variables`, `replaceTags`) and `plaidcloud.rpc.identifiers` (`SCHEMA_PREFIX`, `TABLE_PREFIX`), moved from plaidcloud-utilities, which re-exports them from its own `stringtransforms` and `query`. A service that only substitutes `{variables}` or recognises a table id -- the workflow navigator is one -- then needs plaidcloud-rpc alone, rather than plaidcloud-utilities and the pandas and numpy it requires. Behaviour is unchanged: the same exceptions, with the same messages ([sc-30827](https://app.shortcut.com/plaidcloud/story/30827)) ([@rad-pat](https://github.com/rad-pat)).
+
 ## v1.18.0
 
 - `vector` columns now work on Databricks as well as StarRocks and Snowflake. `PlaidVector` compiles to `ARRAY<FLOAT>` there, the same shape as StarRocks and **not** Snowflake's: the width is column metadata, not part of the type, so `PlaidVectorOfWidth(n)` compiles identically to a bare `PlaidVector` on Databricks and a Databricks vector column needs no declared width. 🚨 The element type is FLOAT and is not interchangeable — Databricks' `vector_cosine_similarity` and `vector_l2_distance` accept `ARRAY<FLOAT>` and error on `ARRAY<DOUBLE>` or `ARRAY<DECIMAL>`, and SQLAlchemy's `Double` renders `ARRAY<DOUBLE>` on this dialect, so a widened element type would produce a column that accepts every write and fails every similarity query. The type subclasses databricks-sqlalchemy's `DatabricksArray` only to set `cache_ok`, which that package leaves unset — without it every statement carrying a vector column is uncacheable and warns. Every other dialect is refused exactly as before. **Databricks' vector builtins require DBR ≥ 18.1**, and nothing in this package knows a warehouse's runtime version, so a pre-18.1 warehouse fails at query time with an unknown-function error rather than at DDL time ([sc-30921](https://app.shortcut.com/plaidcloud/story/30921)) ([@inviscid](https://github.com/inviscid)).
