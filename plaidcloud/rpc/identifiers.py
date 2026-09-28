@@ -1,4 +1,3 @@
-#!/usr/bin/env python
 """How PlaidCloud names what it keeps in a warehouse.
 
 A project's schema and each of its tables carry these prefixes, which is how a
