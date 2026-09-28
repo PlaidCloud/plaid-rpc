@@ -1,10 +1,12 @@
-#!/usr/bin/env python
-
 from unittest import mock
 
 import pytest
 
-from plaidcloud.rpc.stringtransforms import apply_variables, replaceTags
+from plaidcloud.rpc.stringtransforms import (
+    VariableSubstitutionError,
+    apply_variables,
+    replaceTags,
+)
 
 
 class TestApplyVariables:
@@ -28,7 +30,7 @@ class TestApplyVariables:
         assert apply_variables('plain') == 'plain'
 
     def test_a_missing_variable_is_refused_by_name(self):
-        with pytest.raises(Exception, match=r'invalid or undefined: a, b\.'):
+        with pytest.raises(VariableSubstitutionError, match=r'invalid or undefined: a, b\.'):
             apply_variables('{b}{a}', {})
 
     def test_a_missing_variable_is_removed_when_not_strict(self):
@@ -42,7 +44,7 @@ class TestApplyVariables:
         handler.assert_called_once_with('The following variables are invalid or undefined: a.')
 
     def test_an_unparseable_message_says_which(self):
-        with pytest.raises(Exception, match='Error trying to apply variables to string {a'):
+        with pytest.raises(VariableSubstitutionError, match='Error trying to apply variables to string {a'):
             apply_variables('{a', {'a': 'x'})
 
 

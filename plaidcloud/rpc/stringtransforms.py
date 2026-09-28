@@ -1,4 +1,3 @@
-#!/usr/bin/env python
 """The `{variable}` substitution PlaidCloud applies to a workflow's text.
 
 Here rather than in plaidcloud-utilities so that a service which only
@@ -17,6 +16,14 @@ __credits__ = ["Paul Morel"]
 __license__ = "Apache 2.0"
 __maintainer__ = "Paul Morel"
 __email__ = "paul.morel@tartansolutions.com"
+
+
+class VariableSubstitutionError(Exception):
+    """A template that names an undefined variable, or cannot be parsed.
+
+    An `Exception` subclass, so code that caught the bare `Exception` this used
+    to be still catches it.
+    """
 
 
 def replaceTags(value: str, data_record: dict[str, str]) -> str:
@@ -85,15 +92,15 @@ def apply_variables(message: str | None, variables: dict[str, Any] | None = None
             for col in string.Formatter().parse(message)
             if col[1] is not None
         }
-    except Exception as e:
-        raise Exception(f'Error trying to apply variables to string {message}: {e!s}')
+    except ValueError as e:
+        raise VariableSubstitutionError(f'Error trying to apply variables to string {message}: {e!s}') from e
 
     bad_keys = [k for k in text_keys if k not in variables]
     if bad_keys:
         bad_string = ", ".join(sorted(bad_keys))
         error_message = f'The following variables are invalid or undefined: {bad_string}.'
         if strict:
-            raise Exception(error_message)
+            raise VariableSubstitutionError(error_message)
         else:
             # Remove any .format tokens that are missing from the
             # substitution dict

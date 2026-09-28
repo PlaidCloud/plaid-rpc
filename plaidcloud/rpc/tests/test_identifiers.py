@@ -1,5 +1,3 @@
-#!/usr/bin/env python
-
 from plaidcloud.rpc import identifiers
 
 
