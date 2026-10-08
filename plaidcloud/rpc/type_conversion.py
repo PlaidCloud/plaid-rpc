@@ -18,10 +18,12 @@ from sqlalchemy import (
 from sqlalchemy.sql.sqltypes import LargeBinary
 
 # Check SQLAlchemy version
+# The generic Double, not DOUBLE: Postgres, SQL Server and Oracle have no type named DOUBLE,
+# and Double renders DOUBLE PRECISION there while staying DOUBLE everywhere else.
 if sqlalchemy.__version__.startswith('2.'):
-    from sqlalchemy.types import DOUBLE
+    from sqlalchemy.types import Double
 else:  # pragma: no cover
-    from databend_sqlalchemy.types import DOUBLE
+    from databend_sqlalchemy.types import DOUBLE as Double
 from plaidcloud.rpc.database import (
     GUIDHyphens,
     PlaidCurrency,
@@ -643,7 +645,10 @@ _sqlalchemy_from_dtype = regex_map({
     r'^integer$': INTEGER,
     r'^int64$': BIGINT,  # 8 bytes
     r'^bigint$': BIGINT,
-    r'^float\d*': FLOAT,
+    # Generic FLOAT compiles to 32-bit on StarRocks and Databend, so only the narrow spellings
+    # keep it; `float`, float64 and every other float spelling are IEEE doubles (sc-31931).
+    r'^float(?:16|32|4)(?!\d)': FLOAT,
+    r'^float\d*': Double,
     r'^numeric.*': PlaidNumeric,
     r'^currency$': PlaidCurrency,
     r'^decimal.*': PlaidNumeric,
@@ -672,7 +677,7 @@ _sqlalchemy_from_dtype = regex_map({
     r'^inet$': PlaidUnicode(100),
     r'^macaddr$': PlaidUnicode(100),
     r'^tinyint$': PlaidTinyInt,
-    r'^double$': DOUBLE,
+    r'^double$': Double,
     r'^geometry': PlaidGeometry,
     r'^geography': PlaidGeography,
     r'^vector$': PlaidVector,
