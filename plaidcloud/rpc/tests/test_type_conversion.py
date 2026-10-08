@@ -4,7 +4,7 @@
 from unittest import mock
 
 import pytest
-from sqlalchemy import BIGINT, DOUBLE, FLOAT, INTEGER, SMALLINT, TEXT, Boolean, Date, Interval, Time
+from sqlalchemy import BIGINT, FLOAT, INTEGER, SMALLINT, TEXT, Boolean, Date, Double, Interval, Time
 from sqlalchemy.sql.sqltypes import LargeBinary
 
 from plaidcloud.rpc import type_conversion
@@ -232,7 +232,7 @@ class TestSqlalchemyFromDtype:
 
     @pytest.mark.parametrize('dtype', ['float', 'float64', 'float8', 'Float64', 'float128', 'double'])
     def test_64_bit_floats_are_double(self, dtype):
-        assert sqlalchemy_from_dtype(dtype) is DOUBLE
+        assert sqlalchemy_from_dtype(dtype) is Double
 
     @pytest.mark.parametrize('dtype', ['float16', 'float32', 'float4'])
     def test_narrow_floats_stay_float(self, dtype):
@@ -243,6 +243,12 @@ class TestSqlalchemyFromDtype:
         starrocks = pytest.importorskip('starrocks.dialect')
         compiled = sqlalchemy_from_dtype(dtype)().compile(dialect=starrocks.StarRocksDialect())
         assert str(compiled) == 'DOUBLE'
+
+    @pytest.mark.parametrize('dtype', ['float', 'float64', 'double'])
+    def test_double_is_valid_ddl_on_postgres(self, dtype):
+        # Postgres has no type named DOUBLE; uppercase DOUBLE would render one.
+        from sqlalchemy.dialects import postgresql
+        assert str(sqlalchemy_from_dtype(dtype)().compile(dialect=postgresql.dialect())) == 'DOUBLE PRECISION'
 
     def test_json(self):
         assert sqlalchemy_from_dtype('json') is PlaidJSON
