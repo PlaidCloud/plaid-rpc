@@ -4,7 +4,7 @@
 from unittest import mock
 
 import pytest
-from sqlalchemy import BIGINT, INTEGER, SMALLINT, TEXT, Boolean, Date, Interval, Time
+from sqlalchemy import BIGINT, DOUBLE, FLOAT, INTEGER, SMALLINT, TEXT, Boolean, Date, Interval, Time
 from sqlalchemy.sql.sqltypes import LargeBinary
 
 from plaidcloud.rpc import type_conversion
@@ -229,6 +229,20 @@ class TestSqlalchemyFromDtype:
 
     def test_smallint(self):
         assert sqlalchemy_from_dtype('smallint') is SMALLINT
+
+    @pytest.mark.parametrize('dtype', ['float', 'float64', 'float8', 'Float64', 'float128', 'double'])
+    def test_64_bit_floats_are_double(self, dtype):
+        assert sqlalchemy_from_dtype(dtype) is DOUBLE
+
+    @pytest.mark.parametrize('dtype', ['float16', 'float32', 'float4'])
+    def test_narrow_floats_stay_float(self, dtype):
+        assert sqlalchemy_from_dtype(dtype) is FLOAT
+
+    @pytest.mark.parametrize('dtype', ['float', 'float64'])
+    def test_float64_is_not_32_bit_on_starrocks(self, dtype):
+        starrocks = pytest.importorskip('starrocks.dialect')
+        compiled = sqlalchemy_from_dtype(dtype)().compile(dialect=starrocks.StarRocksDialect())
+        assert str(compiled) == 'DOUBLE'
 
     def test_json(self):
         assert sqlalchemy_from_dtype('json') is PlaidJSON
