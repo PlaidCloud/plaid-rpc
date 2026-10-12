@@ -225,6 +225,12 @@ async def call_as_coroutine(function, default_error, use_thread, is_streamed, sy
         # Show the exception type and message but not the stack frames — enough to
         # diagnose without leaking the traceback to the user. (format_exception(..)[0]
         # is the "Traceback (most recent call last):" header, not the message.)
+        message = str(exc)
+        if hasattr(message, 'msgid'):
+            # A translatable message (a str subclass carrying its `msgid`, e.g. plaid's
+            # i18n.Msg) was written for the user: send it as-is, not reduced to a plain str
+            # behind the type name, so the server's response boundary can translate it.
+            return message
         if isinstance(exc, SyntaxError):
             # SyntaxError is the one family format_exception_only decorates with a
             # location: 'File "<path>", line N' plus the offending source line and a
