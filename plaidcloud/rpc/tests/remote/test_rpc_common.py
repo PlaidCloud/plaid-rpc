@@ -24,6 +24,23 @@ from plaidcloud.rpc.remote.rpc_common import (
 )
 
 
+class _Msg(str):
+    """Stands in for plaid's i18n.Msg: the English rendering, carrying its msgid; str() keeps it."""
+
+    def __new__(cls, msgid, **params):
+        self = super().__new__(cls, msgid.format(**params))
+        self.msgid = msgid
+        return self
+
+    def __str__(self):
+        return self
+
+
+class _Plain(str):
+    def __str__(self):
+        return self
+
+
 class TestRpcError:
 
     def test_default_code(self):
@@ -335,6 +352,45 @@ class TestCallAsCoroutine:
         assert result is None
         assert err['message'] == 'Unexpected error: RuntimeError: async broke'
         assert 'Traceback (most recent call last)' not in err['message']
+
+    @pytest.mark.parametrize('is_async', [False, True], ids=['sync', 'async'])
+    @pytest.mark.parametrize('default_error', [None, 'generic error'], ids=['no-default', 'default'])
+    def test_translatable_message_is_sent_as_is(self, is_async, default_error):
+        # A str subclass carrying its msgid (plaid's i18n.Msg) is the user-facing text:
+        # no type-name prefix, and the same object so the server boundary can translate it.
+        message = _Msg('Unknown member {name}.', name='ada')
+
+        def fn():
+            raise ValueError(message)
+
+        async def afn():
+            raise ValueError(message)
+
+        result, err = self._run(afn if is_async else fn, default_error, False, False, False, logging.getLogger('test'))
+        assert result is None
+        assert err['message'] == 'Unknown member ada.'
+        assert err['message'].msgid == 'Unknown member {name}.'
+        assert err['code'] == -32603
+
+    def test_plain_str_subclass_keeps_the_prefix(self):
+        # Only a message carrying a msgid passes through; any other text is still wrapped.
+        def fn():
+            raise ValueError(_Plain('boom'))
+
+        _, err = self._run(fn, None, False, False, False, logging.getLogger('test'))
+        assert err['message'] == 'Unexpected error: ValueError: boom'
+
+    def test_a_failing_str_keeps_the_old_text(self):
+        class Unprintable(Exception):
+            def __str__(self):
+                raise RuntimeError('no str')
+
+        def fn():
+            raise Unprintable()
+
+        _, err = self._run(fn, None, False, False, False, logging.getLogger('test'))
+        assert err['message'].startswith('Unexpected error: ')
+        assert err['message'].endswith('Unprintable: <exception str() failed>')
 
     def test_async_not_implemented_wrapped(self):
         # Inner try/except wraps all exceptions to -32603 for async fns
