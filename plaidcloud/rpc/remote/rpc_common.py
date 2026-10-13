@@ -227,7 +227,7 @@ async def call_as_coroutine(function, default_error, use_thread, is_streamed, sy
         # is the "Traceback (most recent call last):" header, not the message.)
         try:
             message = str(exc)
-        except Exception:  # pylint: disable=broad-except
+        except Exception:  # noqa: BLE001
             message = None  # format_exception_only below reports it as `<exception str() failed>`
         if hasattr(message, 'msgid'):
             # A translatable message (a str subclass carrying its `msgid`, e.g. plaid's
