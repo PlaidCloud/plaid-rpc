@@ -380,6 +380,18 @@ class TestCallAsCoroutine:
         _, err = self._run(fn, None, False, False, False, logging.getLogger('test'))
         assert err['message'] == 'Unexpected error: ValueError: boom'
 
+    def test_a_failing_str_keeps_the_old_text(self):
+        class Unprintable(Exception):
+            def __str__(self):
+                raise RuntimeError('no str')
+
+        def fn():
+            raise Unprintable()
+
+        _, err = self._run(fn, None, False, False, False, logging.getLogger('test'))
+        assert err['message'].startswith('Unexpected error: ')
+        assert err['message'].endswith('Unprintable: <exception str() failed>')
+
     def test_async_not_implemented_wrapped(self):
         # Inner try/except wraps all exceptions to -32603 for async fns
         async def fn():
