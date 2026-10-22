@@ -287,8 +287,7 @@ def _rest_body_to_file(response: requests.Response, to_file: str) -> str:
         _raise_for_rest_error(response)
         try:
             with open(to_file, 'wb') as file:
-                for chunk in response.iter_content(chunk_size=REST_DOWNLOAD_CHUNK_BYTES):
-                    file.write(chunk)
+                file.writelines(response.iter_content(chunk_size=REST_DOWNLOAD_CHUNK_BYTES))
         except BaseException:
             with contextlib.suppress(OSError):
                 os.remove(to_file)
