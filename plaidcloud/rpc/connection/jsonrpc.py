@@ -221,7 +221,7 @@ def http_json_rpc(token=None, uri=None, verify_ssl=None, json_data=None, proxies
 def http_rest(token: str | None, uri: str, http_method: str, path: str, verify_ssl: bool | None = None,
               params: dict | None = None, body: Any = None, proxies: dict | None = None,
               check_allow_transmit: Callable[[], bool] | None = None, retry: bool = True, headers: dict | None = None,
-              to_file: str | None = None) -> Any:
+              to_file: str | os.PathLike[str] | None = None) -> Any:
     """
     Sends a request to the PlaidCloud REST API on the host that serves `uri`.
 
@@ -243,13 +243,15 @@ def http_rest(token: str | None, uri: str, http_method: str, path: str, verify_s
             and 504, so a write the server committed before answering can be applied twice; a caller whose
             request is not safe to repeat wants a connection built with retry=False
         headers (dict, optional): Custom headers to send with the request
-        to_file (str, optional): a path to write the response's body to as it arrives, rather than decode
-            it, for a download too large to hold in memory. A download that fails part way leaves no file
-            there.
+        to_file (str or path-like, optional): a path to write the response's body to as it arrives, rather
+            than decode it, for a download too large to hold in memory. The body replaces whatever is at
+            the path only once all of it has arrived, so a download that fails leaves that as it was.
     Raises:
         RPCError: for anything but a 2xx, with the status as `code`, so a caller already handling RPC
             failures handles these the same way. Redirects are not followed, so a 3xx raises rather
             than reading as an empty response.
+        requests.exceptions.ChunkedEncodingError: with `to_file`, for a body cut off before its
+            Content-Length, whichever urllib3 is installed.
     """
     headers = dict(headers or {})
     if token:
@@ -276,23 +278,37 @@ def http_rest(token: str | None, uri: str, http_method: str, path: str, verify_s
     return json.loads(response.content) if response.content else None
 
 
-def _rest_body_to_file(response: requests.Response, to_file: str) -> str:
+def _rest_body_to_file(response: requests.Response, to_file: str | os.PathLike[str]) -> str | os.PathLike[str]:
     """Writes a streamed REST response's body to `to_file` a chunk at a time, returning the path.
 
-    It runs while the session that streams the body is still open, and closes
-    the response. A failure part way removes what was written, so a caller
-    never reads a truncated body as a whole one.
+    The body goes to `<to_file>.part`, which replaces `to_file` only once all
+    of it has arrived. A download that fails, even in a process killed part
+    way, never leaves a truncated body at `to_file` nor loses a file already
+    there. A failure the process sees removes the part file too. It runs while
+    the session that streams the body is still open, and closes the response.
     """
     with response:
         _raise_for_rest_error(response)
+        partial = f'{os.fspath(to_file)}.part'
         try:
-            with open(to_file, 'wb') as file:
+            with open(partial, 'wb') as file:
                 file.writelines(response.iter_content(chunk_size=REST_DOWNLOAD_CHUNK_BYTES))
+            _raise_for_a_cut_off_body(response)
+            os.replace(partial, to_file)
         except BaseException:
             with contextlib.suppress(OSError):
-                os.remove(to_file)
+                os.remove(partial)
             raise
     return to_file
+
+
+def _raise_for_a_cut_off_body(response: requests.Response) -> None:
+    """Raises ChunkedEncodingError, as urllib3 2 does by itself, for a streamed body that ended short of its
+    Content-Length. urllib3 1.26 ends such a stream quietly, as though the body were whole."""
+    missing = response.raw.length_remaining
+    if missing:
+        raise requests.exceptions.ChunkedEncodingError(
+            f'Connection broken: the body ended {missing} bytes short of its Content-Length')
 
 
 def _raise_for_rest_error(response: requests.Response) -> None:
@@ -410,7 +426,7 @@ class SimpleRPC(PlainRPCCommon):
                         )
 
         def call_rest(http_method: str, path: str, params: dict | None = None, body: Any = None,
-                      to_file: str | None = None) -> Any:
+                      to_file: str | os.PathLike[str] | None = None) -> Any:
             if not self.allow_transmit:
                 return None
             return http_rest(
