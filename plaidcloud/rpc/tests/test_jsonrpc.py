@@ -2,6 +2,7 @@
 # coding=utf-8
 
 import contextlib
+import io
 import json
 import os
 from unittest import mock
@@ -617,6 +618,31 @@ def _rest_response(status_code=200, content=b''):
     return response
 
 
+class _StreamedBody(io.BytesIO):
+    """A streamed response's body, recording the size of each read, that can drop after `reads_before_dropping`
+    reads as a lost connection does."""
+
+    def __init__(self, content, reads_before_dropping=None):
+        super().__init__(content)
+        self.reads = []
+        self.reads_before_dropping = reads_before_dropping
+
+    def read(self, size=-1):
+        if self.reads_before_dropping is not None and len(self.reads) == self.reads_before_dropping:
+            raise requests.ConnectionError('connection dropped')
+        self.reads.append(size)
+        return super().read(size)
+
+
+def _streamed_response(content, status_code=200, reads_before_dropping=None):
+    """A real Response that reads its body from `raw` as it is asked for, as one sent with stream=True does."""
+    response = requests.Response()
+    response.status_code = status_code
+    response.raw = _StreamedBody(content, reads_before_dropping)
+    response.encoding = 'utf-8'
+    return response
+
+
 @contextlib.contextmanager
 def _rest_session(response):
     """Patch _get_session to yield a Session returning `response`; also yields the kwargs each open used."""
@@ -761,6 +787,42 @@ class TestHttpRest:
                 _send_rest(check_allow_transmit=lambda: True)
         assert _rpc_context.check_allow_transmit is None
 
+    def test_a_response_to_decode_is_not_streamed(self):
+        with _rest_session(_rest_response(content=b'{}')) as (session, _):
+            _send_rest()
+        assert session.request.call_args[1]['stream'] is False
+
+    @pytest.mark.parametrize('retry', [True, False])
+    def test_to_file_streams_the_body_into_the_file_a_chunk_at_a_time(self, tmp_path, retry):
+        body = bytes(range(256)) * 10_000
+        target = str(tmp_path / 'package.parquet')
+        response = _streamed_response(body)
+        with _rest_session(response) as (session, _):
+            assert _send_rest(path='document/view/download-file', to_file=target, retry=retry) == target
+        assert session.request.call_args[1]['stream'] is True
+        assert (tmp_path / 'package.parquet').read_bytes() == body
+        assert set(response.raw.reads) == {jsonrpc.REST_DOWNLOAD_CHUNK_BYTES}
+
+    def test_to_file_writes_no_file_for_an_error_and_raises_its_detail(self, tmp_path):
+        target = tmp_path / 'package.parquet'
+        with (
+            _rest_session(_streamed_response(b'{"detail": "No such document"}', status_code=404)),
+            pytest.raises(RPCError) as raised,
+        ):
+            _send_rest(to_file=str(target))
+        assert raised.value.code == 404
+        assert str(raised.value) == '404: No such document'
+        assert not target.exists()
+
+    def test_to_file_removes_a_body_cut_off_part_way_and_closes_the_response(self, tmp_path):
+        target = tmp_path / 'package.parquet'
+        response = _streamed_response(b'PAR1' * jsonrpc.REST_DOWNLOAD_CHUNK_BYTES, reads_before_dropping=1)
+        with _rest_session(response), pytest.raises(requests.ConnectionError):
+            _send_rest(to_file=str(target))
+        assert response.raw.reads == [jsonrpc.REST_DOWNLOAD_CHUNK_BYTES]
+        assert not target.exists()
+        assert response.raw.closed
+
 
 class TestSimpleRPCCallRest:
 
@@ -774,8 +836,16 @@ class TestSimpleRPCCallRest:
         assert mock_rest.call_args == mock.call(
             'tok', 'https://example.com/json-rpc/', 'POST', 'analyze/dimension/node', True,
             params={'p': 1}, body={'b': 2}, proxies={'https': 'proxy'}, check_allow_transmit=check,
-            retry=False, headers={'h': 'v'},
+            retry=False, headers={'h': 'v'}, to_file=None,
         )
+
+    def test_forwards_the_file_to_write_the_body_to(self):
+        with mock.patch.object(jsonrpc, 'http_rest', return_value='/tmp/package.parquet') as mock_rest:
+            rpc = SimpleRPC('tok', uri='https://example.com/json-rpc/')
+            result = rpc.call_rest('GET', 'document/view/download-file', params={'path': 'p'},
+                                   to_file='/tmp/package.parquet')
+        assert result == '/tmp/package.parquet'
+        assert mock_rest.call_args.kwargs['to_file'] == '/tmp/package.parquet'
 
     def test_string_token_is_sent_as_is(self):
         with mock.patch.object(jsonrpc, 'http_rest') as mock_rest:
