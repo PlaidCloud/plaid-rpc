@@ -9,6 +9,7 @@ from unittest import mock
 
 import pytest
 import requests
+import urllib3
 
 from plaidcloud.rpc.connection import jsonrpc
 from plaidcloud.rpc.connection.jsonrpc import (
@@ -618,27 +619,31 @@ def _rest_response(status_code=200, content=b''):
     return response
 
 
-class _StreamedBody(io.BytesIO):
-    """A streamed response's body, recording the size of each read, that can drop after `reads_before_dropping`
-    reads as a lost connection does."""
+class _BodyOnTheWire(io.BytesIO):
+    """A response's body as the socket delivers it, recording the size of each read urllib3 asks of it."""
 
-    def __init__(self, content, reads_before_dropping=None):
+    def __init__(self, content):
         super().__init__(content)
         self.reads = []
-        self.reads_before_dropping = reads_before_dropping
 
     def read(self, size=-1):
-        if self.reads_before_dropping is not None and len(self.reads) == self.reads_before_dropping:
-            raise requests.ConnectionError('connection dropped')
         self.reads.append(size)
         return super().read(size)
 
 
-def _streamed_response(content, status_code=200, reads_before_dropping=None):
-    """A real Response that reads its body from `raw` as it is asked for, as one sent with stream=True does."""
+def _streamed_response(content, status_code=200, content_length=None, enforce_content_length=True):
+    """A real Response over a real urllib3 response, read through `raw.stream()` as one sent with stream=True is.
+
+    A `content_length` beyond `content` stands for a body cut off part way, which urllib3 2 raises for;
+    `enforce_content_length=False` reads it as urllib3 1.26 does, ending quietly.
+    """
     response = requests.Response()
     response.status_code = status_code
-    response.raw = _StreamedBody(content, reads_before_dropping)
+    response.raw = urllib3.HTTPResponse(
+        body=_BodyOnTheWire(content), status=status_code, preload_content=False,
+        headers={'Content-Length': str(len(content) if content_length is None else content_length)},
+        enforce_content_length=enforce_content_length,
+    )
     response.encoding = 'utf-8'
     return response
 
@@ -801,7 +806,16 @@ class TestHttpRest:
             assert _send_rest(path='document/view/download-file', to_file=target, retry=retry) == target
         assert session.request.call_args[1]['stream'] is True
         assert (tmp_path / 'package.parquet').read_bytes() == body
-        assert set(response.raw.reads) == {jsonrpc.REST_DOWNLOAD_CHUNK_BYTES}
+        assert set(response.raw._fp.reads) == {jsonrpc.REST_DOWNLOAD_CHUNK_BYTES}
+        assert os.listdir(tmp_path) == ['package.parquet']
+
+    def test_to_file_replaces_a_file_already_at_the_path_once_the_body_is_whole(self, tmp_path):
+        target = tmp_path / 'package.parquet'
+        target.write_bytes(b'the copy from the last run')
+        with _rest_session(_streamed_response(b'PAR1 this run PAR1')):
+            assert _send_rest(to_file=target) == target
+        assert target.read_bytes() == b'PAR1 this run PAR1'
+        assert os.listdir(tmp_path) == ['package.parquet']
 
     def test_to_file_writes_no_file_for_an_error_and_raises_its_detail(self, tmp_path):
         target = tmp_path / 'package.parquet'
@@ -812,16 +826,22 @@ class TestHttpRest:
             _send_rest(to_file=str(target))
         assert raised.value.code == 404
         assert str(raised.value) == '404: No such document'
-        assert not target.exists()
+        assert os.listdir(tmp_path) == []
 
-    def test_to_file_removes_a_body_cut_off_part_way_and_closes_the_response(self, tmp_path):
+    @pytest.mark.parametrize('enforce_content_length', [True, False], ids=['urllib3 2', 'urllib3 1.26'])
+    def test_a_body_cut_off_part_way_leaves_the_file_already_there_and_closes_the_response(
+            self, tmp_path, enforce_content_length):
         target = tmp_path / 'package.parquet'
-        response = _streamed_response(b'PAR1' * jsonrpc.REST_DOWNLOAD_CHUNK_BYTES, reads_before_dropping=1)
-        with _rest_session(response), pytest.raises(requests.ConnectionError):
+        target.write_bytes(b'the copy from the last run')
+        chunk = jsonrpc.REST_DOWNLOAD_CHUNK_BYTES
+        response = _streamed_response(b'PAR1' * chunk, content_length=8 * chunk,
+                                      enforce_content_length=enforce_content_length)
+        response.close = mock.Mock(wraps=response.close)
+        with _rest_session(response), pytest.raises(requests.exceptions.ChunkedEncodingError):
             _send_rest(to_file=str(target))
-        assert response.raw.reads == [jsonrpc.REST_DOWNLOAD_CHUNK_BYTES]
-        assert not target.exists()
-        assert response.raw.closed
+        assert target.read_bytes() == b'the copy from the last run'
+        assert os.listdir(tmp_path) == ['package.parquet']
+        response.close.assert_called_once_with()
 
 
 class TestSimpleRPCCallRest:
