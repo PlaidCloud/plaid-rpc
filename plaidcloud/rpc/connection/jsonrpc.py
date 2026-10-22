@@ -4,6 +4,8 @@ import contextlib
 import os
 import tempfile
 import threading
+from collections.abc import Callable
+from typing import Any
 
 import urllib3
 import urllib3.exceptions
@@ -36,6 +38,7 @@ STREAM_ENDPOINTS = {
 }
 
 REST_ROOT = '/rest/v1/'
+REST_DOWNLOAD_CHUNK_BYTES = 1024 * 1024
 
 download_folder = os.path.join(tempfile.gettempdir(), "plaid/download")
 
@@ -215,13 +218,16 @@ def http_json_rpc(token=None, uri=None, verify_ssl=None, json_data=None, proxies
                 _rpc_context.check_allow_transmit = None
 
 
-def http_rest(token, uri, http_method, path, verify_ssl=None, params=None, body=None, proxies=None,
-              check_allow_transmit=None, retry=True, headers=None):
+def http_rest(token: str | None, uri: str, http_method: str, path: str, verify_ssl: bool | None = None,
+              params: dict | None = None, body: Any = None, proxies: dict | None = None,
+              check_allow_transmit: Callable[[], bool] | None = None, retry: bool = True, headers: dict | None = None,
+              to_file: str | None = None) -> Any:
     """
     Sends a request to the PlaidCloud REST API on the host that serves `uri`.
 
     Returns:
-        The decoded JSON response, or None when the response has no body.
+        The decoded JSON response, or None when the response has no body. With `to_file`, that path, now
+        holding the response's body.
     Args:
         token (str): oauth2 token
         uri (str): the server's JSON-RPC uri. Only its host is used — the REST API is found at
@@ -237,6 +243,9 @@ def http_rest(token, uri, http_method, path, verify_ssl=None, params=None, body=
             and 504, so a write the server committed before answering can be applied twice; a caller whose
             request is not safe to repeat wants a connection built with retry=False
         headers (dict, optional): Custom headers to send with the request
+        to_file (str, optional): a path to write the response's body to as it arrives, rather than decode
+            it, for a download too large to hold in memory. A download that fails part way leaves no file
+            there.
     Raises:
         RPCError: for anything but a 2xx, with the status as `code`, so a caller already handling RPC
             failures handles these the same way. Redirects are not followed, so a 3xx raises rather
@@ -257,13 +266,41 @@ def http_rest(token, uri, http_method, path, verify_ssl=None, params=None, body=
             response = session.request(
                 http_method, urljoin(uri, REST_ROOT + path.lstrip('/')), params=params, data=data,
                 headers=headers, verify=verify_ssl, proxies=proxies, allow_redirects=False,
+                stream=to_file is not None,
             )
         finally:
             _rpc_context.check_allow_transmit = None
+        if to_file is not None:
+            return _rest_body_to_file(response, to_file)
+    _raise_for_rest_error(response)
+    return json.loads(response.content) if response.content else None
+
+
+def _rest_body_to_file(response: requests.Response, to_file: str) -> str:
+    """Writes a streamed REST response's body to `to_file` a chunk at a time, returning the path.
+
+    It runs while the session that streams the body is still open, and closes
+    the response. A failure part way removes what was written, so a caller
+    never reads a truncated body as a whole one.
+    """
+    with response:
+        _raise_for_rest_error(response)
+        try:
+            with open(to_file, 'wb') as file:
+                for chunk in response.iter_content(chunk_size=REST_DOWNLOAD_CHUNK_BYTES):
+                    file.write(chunk)
+        except BaseException:
+            with contextlib.suppress(OSError):
+                os.remove(to_file)
+            raise
+    return to_file
+
+
+def _raise_for_rest_error(response: requests.Response) -> None:
+    """Raises RPCError for anything but a 2xx, with the status as `code` and the error's detail as its message."""
     if response.status_code >= 300:
         raise RPCError(f'{response.status_code}: {_rest_error_detail(response)}', data=response.text,
                        code=response.status_code)
-    return json.loads(response.content) if response.content else None
 
 
 def _rest_error_detail(response):
@@ -325,6 +362,10 @@ class SimpleRPC(PlainRPCCommon):
 
     `call_rest` reaches the same host's REST API with the same token, TLS, retry and cancellation:
     dimensions = rpc.call_rest('GET', 'analyze/dimension/dimensions', params={'project_id': project_id})
+
+    With `to_file`, it writes the response's body to that path as it arrives instead of decoding it:
+    rpc.call_rest('GET', 'document/view/download-file', params={'account_id': account_id, 'path': path},
+                  to_file=local_path)
     """
     call_rest = None
 
@@ -369,13 +410,14 @@ class SimpleRPC(PlainRPCCommon):
                             code=error.get('code'),
                         )
 
-        def call_rest(http_method, path, params=None, body=None):
+        def call_rest(http_method: str, path: str, params: dict | None = None, body: Any = None,
+                      to_file: str | None = None) -> Any:
             if not self.allow_transmit:
                 return None
             return http_rest(
                 token() if callable(token) else token, uri, http_method, path, verify_ssl,
                 params=params, body=body, proxies=proxies, check_allow_transmit=check_allow_transmit,
-                retry=retry, headers=headers,
+                retry=retry, headers=headers, to_file=to_file,
             )
 
         self.call_rest = call_rest
