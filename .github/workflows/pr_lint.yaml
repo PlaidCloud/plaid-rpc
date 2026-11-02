@@ -91,7 +91,7 @@ jobs:
           check_name: Test Results
       - name: Pytest Coverage Comment
         if: always()
-        uses: MishaKav/pytest-coverage-comment@v1.12.3
+        uses: MishaKav/pytest-coverage-comment@v1.13.0
         with:
           pytest-xml-coverage-path: coverage.xml
           junitxml-path: test-results.xml
