@@ -1,6 +1,7 @@
 name: Lint and Test PlaidCloud RPC
 on:
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
     branches:
       - master
 env:
@@ -8,6 +9,7 @@ env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 jobs:
   reviewdog:
+    if: ${{ !github.event.pull_request.draft }}
     name: Lint PlaidCloud RPC w ReviewDog
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -35,6 +37,7 @@ jobs:
         run: |
           ruff check plaidcloud --output-format=concise --exit-zero 2>&1 | reviewdog -efm="%f:%l:%c: %m" -name="Ruff" -reporter=github-check -level=warning -fail-level=error
   license:
+    if: ${{ !github.event.pull_request.draft }}
     name: Check Dependency Licenses
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -50,6 +53,7 @@ jobs:
           extras: full,tracing
           python-version: ${{ env.PYTHON_VERSION }}
   test:
+    if: ${{ !github.event.pull_request.draft }}
     name: Run Tests
     runs-on: ubuntu-latest
     timeout-minutes: 5
