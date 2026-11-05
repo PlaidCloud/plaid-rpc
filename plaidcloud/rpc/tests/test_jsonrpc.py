@@ -880,3 +880,111 @@ class TestSimpleRPCCallRest:
 
     def test_is_not_an_rpc_namespace_before_init(self):
         assert object.__new__(SimpleRPC).call_rest is None
+
+
+# --- cancelling a streamed download that is waiting for its response headers ---
+
+def _stalling_server():
+    """A server that reads the request and never answers; returns (uri, release, close)."""
+    import socket
+    import threading
+
+    server = socket.socket()
+    server.bind(('127.0.0.1', 0))
+    server.listen()
+    held = []
+    release = threading.Event()
+
+    def serve():
+        conn, _ = server.accept()
+        held.append(conn)
+        conn.recv(65536)
+        release.wait(10)
+
+    threading.Thread(target=serve, daemon=True).start()
+
+    def close():
+        release.set()
+        for conn in held:
+            conn.close()
+        server.close()
+
+    return f'http://127.0.0.1:{server.getsockname()[1]}/', close
+
+
+def _download_in_thread(uri, cancel, proxies=None):
+    import threading
+
+    from plaidcloud.rpc.connection.jsonrpc import cancellable_downloads
+
+    outcome = []
+
+    def run():
+        try:
+            with cancellable_downloads(cancel):
+                http_json_rpc(uri=uri, json_data={'method': next(iter(STREAM_ENDPOINTS)), 'params': {}}, proxies=proxies)
+            outcome.append(None)
+        except Exception as err:  # noqa: BLE001 - hand any failure back to the asserting thread
+            outcome.append(err)
+
+    thread = threading.Thread(target=run, daemon=True)
+    thread.start()
+    return thread, outcome
+
+
+def test_cancel_unblocks_a_download_stalled_before_headers():
+    import time
+
+    import requests
+
+    from plaidcloud.rpc.connection.jsonrpc import DownloadCancel
+
+    uri, close = _stalling_server()
+    cancel = DownloadCancel()
+    thread, outcome = _download_in_thread(uri, cancel)
+    try:
+        time.sleep(0.5)
+        assert thread.is_alive()  # waiting on the server
+        cancel.cancel()
+        thread.join(3)
+        assert not thread.is_alive()
+        assert isinstance(outcome[0], requests.exceptions.ConnectionError)
+    finally:
+        close()
+
+
+def test_cancelling_before_the_connection_exists_still_ends_the_download():
+    import requests
+
+    from plaidcloud.rpc.connection.jsonrpc import DownloadCancel
+
+    uri, close = _stalling_server()
+    cancel = DownloadCancel()
+    cancel.cancel()
+    thread, outcome = _download_in_thread(uri, cancel)
+    try:
+        thread.join(3)
+        assert not thread.is_alive()
+        assert isinstance(outcome[0], requests.exceptions.ConnectionError)
+    finally:
+        close()
+
+
+def test_cancel_unblocks_a_download_stalled_behind_a_proxy():
+    import requests
+
+    from plaidcloud.rpc.connection.jsonrpc import DownloadCancel
+
+    proxy, close = _stalling_server()  # accepts the proxied request and never answers
+    cancel = DownloadCancel()
+    thread, outcome = _download_in_thread('http://plaid.invalid/', cancel, proxies={'http': proxy})
+    try:
+        import time
+        time.sleep(0.5)
+        assert thread.is_alive()
+        cancel.cancel()
+        thread.join(3)
+        assert not thread.is_alive()
+        assert isinstance(outcome[0], requests.exceptions.ConnectionError)
+    finally:
+        close()

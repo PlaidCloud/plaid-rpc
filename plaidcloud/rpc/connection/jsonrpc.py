@@ -10,7 +10,10 @@ from typing import Any
 import urllib3
 import urllib3.exceptions
 import requests
+import socket
 from requests.adapters import HTTPAdapter
+from urllib3.connection import HTTPConnection, HTTPSConnection
+from urllib3.connectionpool import HTTPConnectionPool, HTTPSConnectionPool
 from requests_futures.sessions import FuturesSession
 from urllib3.util.retry import Retry
 import orjson as json
@@ -91,8 +94,84 @@ def _get_shared_session():
     return _shared_session
 
 
+class DownloadCancel:
+    """Ends a streamed download from another thread: `cancel()` shuts the download's socket down, which
+    unblocks the thread even while it waits for the server's response headers. Use it with
+    `cancellable_downloads`; the blocked call then raises a requests ConnectionError."""
+
+    def __init__(self):
+        self._lock = threading.Lock()
+        self._sockets = []
+        self.cancelled = False
+
+    def _add(self, sock):
+        with self._lock:
+            self._sockets = [s for s in self._sockets if s.fileno() != -1]
+            self._sockets.append(sock)
+            cancelled = self.cancelled
+        if cancelled:
+            self._shutdown(sock)
+
+    @staticmethod
+    def _shutdown(sock):
+        with contextlib.suppress(OSError):
+            sock.shutdown(socket.SHUT_RDWR)
+
+    def cancel(self):
+        with self._lock:
+            self.cancelled = True
+            sockets = list(self._sockets)
+        for sock in sockets:
+            self._shutdown(sock)
+
+
 @contextlib.contextmanager
-def _get_session(*, shared=False, futures=False, retry_obj=0):
+def cancellable_downloads(cancel: DownloadCancel):
+    """Streamed downloads (download_csv and its siblings) made on this thread inside the block can be
+    ended with `cancel.cancel()`."""
+    _rpc_context.download_cancel = cancel
+    try:
+        yield
+    finally:
+        _rpc_context.download_cancel = None
+
+
+class _CancellableAdapter(HTTPAdapter):
+    """Records each connection's socket with a DownloadCancel as it connects."""
+
+    def __init__(self, cancel, **kwargs):
+        self._download_cancel = cancel
+        super().__init__(**kwargs)
+
+    def _record_sockets(self, manager):
+        cancel = self._download_cancel
+
+        def recording(connection_cls):
+            class Recording(connection_cls):
+                def connect(self):
+                    super().connect()
+                    cancel._add(self.sock)
+            return Recording
+
+        class Pool(HTTPConnectionPool):
+            ConnectionCls = recording(HTTPConnection)
+
+        class SecurePool(HTTPSConnectionPool):
+            ConnectionCls = recording(HTTPSConnection)
+
+        manager.pool_classes_by_scheme = {'http': Pool, 'https': SecurePool}
+        return manager
+
+    def init_poolmanager(self, *args, **kwargs):
+        super().init_poolmanager(*args, **kwargs)
+        self._record_sockets(self.poolmanager)
+
+    def proxy_manager_for(self, *args, **kwargs):
+        return self._record_sockets(super().proxy_manager_for(*args, **kwargs))
+
+
+@contextlib.contextmanager
+def _get_session(*, shared=False, futures=False, retry_obj=0, cancel=None):
     """Yield a requests Session configured for an RPC call.
 
     - shared=True: yield the lazily-built module-level Session. `futures` and `retry_obj`
@@ -100,6 +179,7 @@ def _get_session(*, shared=False, futures=False, retry_obj=0):
       cancellation via the thread-local. NOT closed on exit — it is reused across calls.
     - futures=True: yield a fresh FuturesSession with `retry_obj` on its adapter.
     - default: yield a fresh requests.Session with `retry_obj` on its adapter.
+    - cancel: a DownloadCancel whose cancel() shuts down this session's connections.
 
     Fresh sessions are closed on context exit.
     """
@@ -108,7 +188,7 @@ def _get_session(*, shared=False, futures=False, retry_obj=0):
         return
     session = FuturesSession() if futures else requests.Session()
     try:
-        adapter = HTTPAdapter(max_retries=retry_obj)
+        adapter = _CancellableAdapter(cancel, max_retries=retry_obj) if cancel else HTTPAdapter(max_retries=retry_obj)
         session.mount('http://', adapter)
         session.mount('https://', adapter)
         yield session
@@ -160,7 +240,7 @@ def http_json_rpc(token=None, uri=None, verify_ssl=None, json_data=None, proxies
     payload = json.dumps(json_data, default=unsupported_object_json_encoder, option=json.OPT_NAIVE_UTC | json.OPT_NON_STR_KEYS)
 
     if streamable():
-        with _get_session(retry_obj=0) as session:
+        with _get_session(retry_obj=0, cancel=getattr(_rpc_context, 'download_cancel', None)) as session:
             handle, file_name = tempfile.mkstemp(dir=download_folder, prefix="download_", suffix=".tmp")
             os.close(handle)  # Can't control the access mode, so close this one and open another.
             with open(file_name, 'wb') as tmp_file:
