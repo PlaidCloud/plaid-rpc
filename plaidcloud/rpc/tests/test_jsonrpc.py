@@ -924,7 +924,7 @@ def _download_in_thread(uri, cancel, proxies=None):
             with cancellable_downloads(cancel):
                 http_json_rpc(uri=uri, json_data={'method': next(iter(STREAM_ENDPOINTS)), 'params': {}}, proxies=proxies)
             outcome.append(None)
-        except Exception as err:
+        except Exception as err:  # noqa: BLE001 - hand any failure back to the asserting thread
             outcome.append(err)
 
     thread = threading.Thread(target=run, daemon=True)
