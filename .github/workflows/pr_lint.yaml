@@ -7,11 +7,17 @@ on:
 env:
   PYTHON_VERSION: '3.12'
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+permissions:
+  contents: read
+
 jobs:
   reviewdog:
     if: ${{ !github.event.pull_request.draft }}
     name: Lint PlaidCloud RPC w ReviewDog
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      checks: write
     timeout-minutes: 5
     steps:
       - name: Ensure python ${{ env.PYTHON_VERSION }}
@@ -89,3 +95,20 @@ jobs:
         with:
           pytest-xml-coverage-path: coverage.xml
           junitxml-path: test-results.xml
+  audit:
+    if: ${{ !github.event.pull_request.draft }}
+    name: Dependency Audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Ensure python 3.12
+        uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+      - name: Checkout code
+        uses: actions/checkout@v7
+      - name: pip-audit
+        run: |
+          python -m pip install --upgrade pip
+          pip install pip-audit -e ".[full,tracing]"
+          pip-audit --skip-editable
