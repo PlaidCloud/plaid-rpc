@@ -20,6 +20,7 @@ from urllib3.connection import HTTPConnection, HTTPSConnection
 from urllib3.connectionpool import HTTPConnectionPool, HTTPSConnectionPool
 from urllib3.util.retry import Retry
 
+from plaidcloud.rpc.connection.rest_routes import RouteMissing, error_body, rest_error, rest_request, route_missing
 from plaidcloud.rpc.orjson import unsupported_object_json_encoder
 from plaidcloud.rpc.remote.rpc_common import WARNING_CODE, RPCError, next_call_id
 from plaidcloud.rpc.remote.rpc_tools import PlainRPCCommon
@@ -53,6 +54,7 @@ if not os.path.exists(download_folder):  # pragma: no cover
 
 _rpc_context = threading.local()
 _shared_session = None
+_shared_rest_session = None
 
 # urllib3 keeps a fixed-size connection pool per host; once it's full, extra
 # concurrent requests open a connection that urllib3 then *discards* on return
@@ -63,6 +65,12 @@ _shared_session = None
 DEFAULT_POOL_MAXSIZE = 32
 
 
+# REST reports a failure as a 5xx where json-rpc answered 200 with an error, so retrying a 5xx would run a
+# write that failed deterministically again and again. Only GET is retried on a status, and never a 500, which is the server's own failure, and the last 5xx is
+# returned (to become an RPCError) rather than raised as a RetryError. Connection failures retry for all.
+REST_RETRY = {'allowed_methods': ['GET'], 'status_forcelist': [502, 503, 504], 'raise_on_status': False}
+
+
 def _pool_maxsize():
     try:
         return max(1, int(os.environ.get('PLAIDCLOUD_RPC_POOL_MAXSIZE', DEFAULT_POOL_MAXSIZE)))
@@ -70,7 +78,7 @@ def _pool_maxsize():
         return DEFAULT_POOL_MAXSIZE
 
 
-def _get_shared_session():
+def _get_shared_session(rest=False):
     """Lazily build a module-level requests.Session for standard (non-streaming, non-fire-and-forget)
     RPC and REST calls. Reusing one session amortises TCP+TLS handshakes across calls.
 
@@ -81,19 +89,22 @@ def _get_shared_session():
     in-flight RPCs exceed pool_maxsize, urllib3 logs "Connection pool is full" and
     discards the surplus connection on return, which defeats the shared-session win.
     """
-    global _shared_session
-    if _shared_session is None:
+    global _shared_session, _shared_rest_session
+    if (_shared_rest_session if rest else _shared_session) is None:
         pool_size = _pool_maxsize()
         session = requests.Session()
         adapter = HTTPAdapter(
-            max_retries=RPCRetry(),
+            max_retries=RPCRetry(**REST_RETRY) if rest else RPCRetry(),
             pool_connections=pool_size,
             pool_maxsize=pool_size,
         )
         session.mount('http://', adapter)
         session.mount('https://', adapter)
-        _shared_session = session
-    return _shared_session
+        if rest:
+            _shared_rest_session = session
+        else:
+            _shared_session = session
+    return _shared_rest_session if rest else _shared_session
 
 
 class DownloadCancel:
@@ -176,7 +187,7 @@ class _CancellableAdapter(HTTPAdapter):
 
 @contextlib.contextmanager
 def _get_session(*, shared: bool = False, futures: bool = False, retry_obj: Retry | int = 0,
-                 cancel: DownloadCancel | None = None) -> Iterator[requests.Session]:
+                 cancel: DownloadCancel | None = None, rest: bool = False) -> Iterator[requests.Session]:
     """Yield a requests Session configured for an RPC call.
 
     - shared=True: yield the lazily-built module-level Session. `futures` and `retry_obj`
@@ -185,11 +196,12 @@ def _get_session(*, shared: bool = False, futures: bool = False, retry_obj: Retr
     - futures=True: yield a fresh FuturesSession with `retry_obj` on its adapter.
     - default: yield a fresh requests.Session with `retry_obj` on its adapter.
     - cancel: a DownloadCancel whose cancel() shuts down this session's connections.
+    - rest=True (with shared): the shared session for REST calls, which retries a 5xx only for a GET.
 
     Fresh sessions are closed on context exit.
     """
     if shared:
-        yield _get_shared_session()
+        yield _get_shared_session(rest=rest)
         return
     session = FuturesSession() if futures else requests.Session()
     try:
@@ -336,9 +348,8 @@ def http_rest(token: str | None, uri: str, http_method: str, path: str, verify_s
         body (json-encodable object, optional): the JSON request body
         proxies (dict): Dictionary mapping protocol or protocol and hostname to the URL of the proxy.
         check_allow_transmit (callable, optional): For use in retry, callable method to see if retries are still valid to send
-        retry (bool, optional): Whether or not to use retry at all, default True. Retries cover 500, 502
-            and 504, so a write the server committed before answering can be applied twice; a caller whose
-            request is not safe to repeat wants a connection built with retry=False
+        retry (bool, optional): Whether or not to use retry at all, default True. A GET is retried on 500, 502
+            and 504; a write is retried only when it could not connect. The last 5xx is raised as an RPCError
         headers (dict, optional): Custom headers to send with the request
         to_file (str or path-like, optional): a path to write the response's body to as it arrives, rather
             than decode it, for a download too large to hold in memory. The body replaces whatever is at
@@ -359,7 +370,7 @@ def http_rest(token: str | None, uri: str, http_method: str, path: str, verify_s
         data = json.dumps(body, default=unsupported_object_json_encoder, option=json.OPT_NAIVE_UTC | json.OPT_NON_STR_KEYS)
     inject_trace_context(headers)
 
-    with _get_session(shared=retry) as session:
+    with _get_session(shared=retry, rest=True) as session:
         _rpc_context.check_allow_transmit = check_allow_transmit
         try:
             response = session.request(
@@ -434,11 +445,9 @@ class RPCRetry(Retry):
             check_allow_transmit (callable, optional): Method to call to check if retries are still to be made
                 This can be used to prevent retry of RPC methods once a workflow has been cancelled and the RPC fails
         """
-        kwargs.update(
-            allowed_methods=['GET', 'POST', 'PUT', 'DELETE'],
-            status_forcelist=[500, 502, 504],
-            backoff_factor=0.1,
-        )
+        kwargs.setdefault('allowed_methods', ['GET', 'POST', 'PUT', 'DELETE'])
+        kwargs.setdefault('status_forcelist', [500, 502, 504])
+        kwargs.update(backoff_factor=0.1)
         if 'connect' not in kwargs:
             kwargs['connect'] = 5
         super().__init__(*args, **kwargs)
@@ -495,23 +504,40 @@ class SimpleRPC(PlainRPCCommon):
         self.__auth_token = token
 
         def call_rpc(method_path: str, params: dict, fire_and_forget: bool = False) -> Any:
+            request = rest_request(method_path, params)
+            if request is not None:
+                try:
+                    return call_routed(request)
+                except RouteMissing:
+                    pass  # a tenant on an older tag has no such route; its /json-rpc still has the method
+                except Exception:
+                    # Fire-and-forget never raised: json-rpc's future swallowed the failure after the send
+                    if not fire_and_forget:
+                        raise
+                    print(f'Exception for method {method_path}')
+                    return None
             if callable(token):
                 http_token = token()
             else:
                 http_token = token
-            response = http_json_rpc(
-                http_token, urljoin(uri, method_path), verify_ssl,
-                {
-                    'jsonrpc': '2.0',
-                    'method': method_path,
-                    'params': params,
-                },
-                proxies=proxies,
-                fire_and_forget=fire_and_forget,
-                check_allow_transmit=check_allow_transmit,
-                retry=retry,
-                headers=headers,
-            )
+            try:
+                response = http_json_rpc(
+                    http_token, urljoin(uri, method_path), verify_ssl,
+                    {
+                        'jsonrpc': '2.0',
+                        'method': method_path,
+                        'params': params,
+                    },
+                    proxies=proxies,
+                    fire_and_forget=fire_and_forget,
+                    check_allow_transmit=check_allow_transmit,
+                    retry=retry,
+                    headers=headers,
+                )
+            except requests.HTTPError as error:
+                if error.response is not None and error.response.status_code in (404, 405):
+                    raise RPCError(f'{method_path} is not available on this server', code=-32601) from error
+                raise
             if response:
                 if isinstance(response, str):
                     return response
@@ -527,6 +553,19 @@ class SimpleRPC(PlainRPCCommon):
                             data=error.get('data'),
                             code=error.get('code'),
                         )
+
+        def call_routed(request):
+            if request.verb is None:
+                return request.finish(None)
+            try:
+                result = call_rest(request.verb, request.path, params=request.query, body=request.body)
+            except RPCError as error:
+                status, body = error.code, error_body(error)
+                if route_missing(status, body):
+                    raise RouteMissing from error
+                if (result := request.recover(status, body)) is None:
+                    raise rest_error(status, body, error) from error
+            return request.finish(result) if request.finish else result
 
         def call_rest(http_method: str, path: str, params: dict | None = None, body: Any = None,
                       to_file: str | os.PathLike[str] | None = None) -> Any:

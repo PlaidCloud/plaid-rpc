@@ -251,9 +251,9 @@ async def execute_json_rpc(msg, auth_id, version=1, base_path=BASE_MODULE_PATH, 
 
     def _check_scopes(method, required_scope, scopes):
         # Returns True if the method is authorized by the scopes. False if it is not.
-        if method.startswith('identity/me/'):
-            # Special case. identity.me returns info about the caller,
-            # and has more relaxed security.
+        if method.startswith('identity/me/') and not (required_scope or '').endswith('.write'):
+            # Special case. identity.me reads return info about the caller,
+            # and have more relaxed security. Its writes need the write scope like any other.
             return True
 
         return (

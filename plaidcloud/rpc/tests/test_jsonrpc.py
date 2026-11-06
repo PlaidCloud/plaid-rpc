@@ -839,7 +839,7 @@ class TestHttpRest:
     def test_shared_session_only_when_retrying(self, retry):
         with _rest_session(_rest_response(content=b'{}')) as (_, opened):
             _send_rest(retry=retry)
-        assert opened == [{'shared': retry}]
+        assert opened == [{'shared': retry, 'rest': True}]
 
     def test_check_allow_transmit_is_visible_to_retries_then_cleared(self):
         check = mock.Mock(return_value=True)

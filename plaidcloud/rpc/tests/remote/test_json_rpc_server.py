@@ -207,6 +207,23 @@ class TestExecuteJsonRpc:
             result = self._run(msg, auth_id={}, logger=logger)
         assert result['ok'] is True
 
+    def test_identity_me_write_still_needs_the_write_scope(self):
+        @rpc_method(required_scope='identity.me.write')
+        async def save_option_fn(auth_id):
+            return 'saved'
+
+        with mock.patch(
+            'plaidcloud.rpc.remote.json_rpc_server.get_callable_object',
+            return_value=(save_option_fn, 'identity.me.write', None, False, False),
+        ):
+            logger = logging.getLogger('test')
+            msg = {'id': 1, 'jsonrpc': '2.0', 'method': 'identity/me/save_option', 'params': {}}
+            refused = self._run(msg, auth_id={'scopes': ['identity.me.read']}, logger=logger)
+            allowed = self._run(msg, auth_id={'scopes': ['identity.me.write']}, logger=logger)
+        assert refused['ok'] is False
+        assert refused['error']['code'] == -32601
+        assert allowed == {'id': 1, 'ok': True, 'result': 'saved'}
+
     def test_help_success(self):
         @rpc_method()
         async def target_fn(auth_id, x=1):
