@@ -59,6 +59,7 @@ test = [
     "opentelemetry-instrumentation-sqlalchemy",
     "opentelemetry-instrumentation-redis",
     "redis",
+    "plaidcloud-config",
 ]
 full = [
     "chardet>=2.3.0",
@@ -76,6 +77,12 @@ tracing = [
     "opentelemetry-instrumentation-sqlalchemy",
     "opentelemetry-instrumentation-redis",
     "redis",
+]
+
+# Redis connectors (plaidcloud.rpc.redis_connector). Not part of the base install: rpc_common stays import-light.
+redis = [
+    "redis>=6.0",
+    "plaidcloud-config",
 ]
 
 [project.urls]
