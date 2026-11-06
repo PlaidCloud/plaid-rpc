@@ -44,8 +44,8 @@ STREAM_ENDPOINTS = {
 
 REST_ROOT = '/rest/v1/'
 REST_DOWNLOAD_CHUNK_BYTES = 1024 * 1024
-# Bounds a streamed download's TCP connect and TLS handshake. Its reads stay unbounded: download_csv sends
-# its response headers only once its query has run.
+# Bounds each of a streamed download's TCP connect attempts (one per address the host resolves to) and its TLS
+# handshake. Its reads stay unbounded: download_csv sends its response headers only once its query has run.
 DOWNLOAD_CONNECT_TIMEOUT = 30
 
 download_folder = os.path.join(tempfile.gettempdir(), "plaid/download")
@@ -103,8 +103,8 @@ class DownloadCancel:
     """Ends a streamed download from another thread: `cancel()` shuts the download's socket down, which
     unblocks the thread even while it waits for the server's response headers, and the blocked call raises a
     requests exception. Use it with `cancellable_downloads`. A socket is known only once it has connected, so a
-    cancel made while it is still connecting takes effect then, or when the connect gives up after
-    DOWNLOAD_CONNECT_TIMEOUT seconds."""
+    cancel made while it is still connecting takes effect then, or when the connect times out
+    (DOWNLOAD_CONNECT_TIMEOUT)."""
 
     def __init__(self) -> None:
         self._lock = threading.Lock()

@@ -940,10 +940,11 @@ class TestSimpleRPCCallRest:
 
 # --- cancelling a streamed download ---
 
-def _stalling_server(reply=b'', tls=None):
+def _stalling_server(reply=b'', tls=None, start=None):
     """A server that reads the request, sends `reply` and then never answers more; returns (uri, close).
 
-    With `tls`, a server SSLContext, it speaks HTTPS.
+    With `tls`, a server SSLContext, it speaks HTTPS. With `start`, an Event, it holds an accepted connection
+    until the event is set, so a client's TLS handshake waits until then.
     """
     server = socket.socket()
     server.bind(('127.0.0.1', 0))
@@ -955,6 +956,8 @@ def _stalling_server(reply=b'', tls=None):
         with contextlib.suppress(OSError):
             conn, _ = server.accept()
             held.append(conn)
+            if start:
+                start.wait(10)
             if tls:
                 conn = tls.wrap_socket(conn, server_side=True)
                 held.append(conn)
@@ -1091,17 +1094,32 @@ def test_a_download_cancelled_mid_body_leaves_no_file(download_folder):
                  marks=pytest.mark.skipif(sys.platform != 'linux', reason='Linux drops a SYN to a full backlog')),
     pytest.param(_listener_that_never_accepts, id='tls handshake'),
 ])
-def test_a_cancel_while_connecting_ends_the_download_at_the_connect_timeout(stuck_listener, monkeypatch):
+def test_a_download_stuck_connecting_ends_at_the_connect_timeout(stuck_listener, monkeypatch):
     monkeypatch.setattr(jsonrpc, 'DOWNLOAD_CONNECT_TIMEOUT', 1)
     uri, close = stuck_listener()
+    thread, outcome = _download_in_thread(uri, DownloadCancel())
+    try:
+        thread.join(3)
+        assert not thread.is_alive()
+        assert isinstance(outcome[0], requests.exceptions.Timeout)
+    finally:
+        close()
+
+
+def test_a_cancel_made_during_the_tls_handshake_takes_effect_once_it_completes(monkeypatch):
+    monkeypatch.setattr(jsonrpc, 'DOWNLOAD_CONNECT_TIMEOUT', 10)
+    handshake = threading.Event()
+    uri, close = _stalling_server(tls=_tls_server_context(), start=handshake)
     cancel = DownloadCancel()
     thread, outcome = _download_in_thread(uri, cancel)
     try:
         time.sleep(0.3)
-        assert thread.is_alive()
+        assert thread.is_alive()  # its ClientHello is unanswered
         cancel.cancel()
+        handshake.set()
         thread.join(3)
         assert not thread.is_alive()
-        assert isinstance(outcome[0], requests.exceptions.Timeout)
+        assert isinstance(outcome[0], requests.exceptions.ConnectionError)
+        assert not isinstance(outcome[0], requests.exceptions.Timeout)
     finally:
         close()
