@@ -5,15 +5,21 @@ import contextlib
 import io
 import json
 import os
+import socket
+import ssl
+import sys
+import threading
+import time
 from unittest import mock
 
 import pytest
 import requests
+import trustme
 import urllib3
 
 from plaidcloud.rpc.connection import jsonrpc
 from plaidcloud.rpc.connection.jsonrpc import (
-    RPCRetry, SimpleRPC, http_json_rpc, http_rest, STREAM_ENDPOINTS,
+    DownloadCancel, RPCRetry, SimpleRPC, cancellable_downloads, http_json_rpc, http_rest, STREAM_ENDPOINTS,
     _get_session, _get_shared_session, _rpc_context,
 )
 from plaidcloud.rpc.remote.rpc_common import RPCError, WARNING_CODE
@@ -30,15 +36,13 @@ def _reset_shared_session():
     _rpc_context.check_allow_transmit = None
 
 
-def _mk_response(json_body=None, status_code=200, content_chunks=None):
+def _mk_response(json_body=None, status_code=200):
     """Helper building a fake requests.Response-like mock."""
     resp = mock.MagicMock()
     resp.status_code = status_code
     resp.raise_for_status = mock.Mock()
     if json_body is not None:
         resp.json = mock.Mock(return_value=json_body)
-    if content_chunks is not None:
-        resp.iter_content = mock.Mock(return_value=iter(content_chunks))
     resp.__enter__ = mock.Mock(return_value=resp)
     resp.__exit__ = mock.Mock(return_value=False)
     return resp
@@ -496,34 +500,86 @@ class TestHttpJsonRpcFireAndForget:
             callback(fail_future)
 
 
+@pytest.fixture
+def download_folder(tmp_path, monkeypatch):
+    """Streamed downloads land in a folder of the test's own, so a file left behind shows."""
+    monkeypatch.setattr(jsonrpc, 'download_folder', str(tmp_path))
+    return tmp_path
+
+
+def _download_response(body, content_type='text/plain; charset=utf-8', status_code=200, missing=0,
+                       enforce_content_length=True):
+    """A real Response streaming `body`, a BytesIO, as plaid's JSON-RPC endpoint sends a streamed result.
+
+    `missing` bytes beyond the body in its Content-Length stand for a body cut off part way;
+    `enforce_content_length=False` reads it as urllib3 1.26 does, ending quietly.
+    """
+    response = requests.Response()
+    response.status_code = status_code
+    response.headers['Content-Type'] = content_type
+    response.raw = urllib3.HTTPResponse(
+        body=body, status=status_code, preload_content=False,
+        headers={'Content-Length': str(len(body.getvalue()) + missing)},
+        enforce_content_length=enforce_content_length,
+    )
+    return response
+
+
+def _download(response):
+    session = mock.create_autospec(requests.Session, instance=True)
+    session.post.return_value = response
+    with mock.patch.object(jsonrpc, '_get_session', _patched_get_session(session)):
+        return http_json_rpc(token='t', uri='https://example.com/rpc', verify_ssl=True,
+                             json_data={'method': next(iter(STREAM_ENDPOINTS)), 'params': {}})
+
+
+class _BodyThatMustBeStreamed(io.BytesIO):
+    """A body that records each read reaching more than `ahead` bytes past what the files in `folder` hold."""
+
+    def __init__(self, content, folder, ahead):
+        super().__init__(content)
+        self.size, self.folder, self.ahead = len(content), folder, ahead
+        self.reads_ahead_of_the_file = []
+
+    def read(self, size=-1):
+        end = self.size if size is None or size < 0 else min(self.tell() + size, self.size)
+        written = sum(path.stat().st_size for path in self.folder.iterdir())
+        if end - written > self.ahead:
+            self.reads_ahead_of_the_file.append((end, written))
+        return super().read(size)
+
+
 class TestHttpJsonRpcStreamable:
 
-    def test_returns_tempfile_on_non_json(self):
-        session = mock.MagicMock()
-        stream_resp = _mk_response(content_chunks=[b'hello ', b'world'])
-        stream_resp.json.side_effect = Exception('not json')
-        session.post.return_value = stream_resp
-        stream_method = next(iter(STREAM_ENDPOINTS))
-        with mock.patch.object(jsonrpc, '_get_session', _patched_get_session(session)):
-            result = http_json_rpc(
-                token='t', uri='https://example.com/rpc', verify_ssl=True,
-                json_data={'method': stream_method, 'params': {}}, retry=False,
-            )
-        assert isinstance(result, str)
-        with open(result, 'rb') as fp:
-            assert fp.read() == b'hello world'
-        os.remove(result)
+    def test_the_body_is_written_to_a_file_whose_path_is_returned(self, download_folder):
+        path = _download(_download_response(io.BytesIO(b'a,b\n1,2\n')))
+        assert os.path.dirname(path) == str(download_folder)
+        with open(path, 'rb') as file:
+            assert file.read() == b'a,b\n1,2\n'
 
-    def test_returns_json_if_present(self):
-        session = mock.MagicMock()
-        session.post.return_value = _mk_response({'ok': True, 'result': 'json'})
-        stream_method = next(iter(STREAM_ENDPOINTS))
-        with mock.patch.object(jsonrpc, '_get_session', _patched_get_session(session)):
-            result = http_json_rpc(
-                token='t', uri='https://example.com/rpc', verify_ssl=True,
-                json_data={'method': stream_method, 'params': {}}, retry=False,
-            )
-        assert result == {'ok': True, 'result': 'json'}
+    def test_a_json_rpc_envelope_is_decoded_and_leaves_no_file(self, download_folder):
+        envelope = {'ok': False, 'error': {'message': 'No such table', 'code': -1}}
+        assert _download(_download_response(io.BytesIO(json.dumps(envelope).encode()), 'application/json')) == envelope
+        assert os.listdir(download_folder) == []
+
+    def test_a_large_body_is_written_as_it_arrives_rather_than_read_whole_first(self, download_folder):
+        chunk = jsonrpc.REST_DOWNLOAD_CHUNK_BYTES
+        body = _BodyThatMustBeStreamed(b'a,b,c\n' * (8 * chunk // 6), download_folder, ahead=2 * chunk)
+        path = _download(_download_response(body))
+        assert body.reads_ahead_of_the_file == []
+        assert os.path.getsize(path) == body.size
+
+    def test_an_http_error_leaves_no_file(self, download_folder):
+        with pytest.raises(requests.HTTPError):
+            _download(_download_response(io.BytesIO(b'Bad Gateway'), status_code=502))
+        assert os.listdir(download_folder) == []
+
+    @pytest.mark.parametrize('enforce_content_length', [True, False], ids=['urllib3 2', 'urllib3 1.26'])
+    def test_a_body_cut_off_part_way_raises_and_leaves_no_file(self, download_folder, enforce_content_length):
+        with pytest.raises(requests.exceptions.ChunkedEncodingError):
+            _download(_download_response(io.BytesIO(b'a,b\n1,2\n'), missing=100,
+                                         enforce_content_length=enforce_content_length))
+        assert os.listdir(download_folder) == []
 
 
 # ---------------------------------------------------------- SimpleRPC call path
@@ -882,13 +938,13 @@ class TestSimpleRPCCallRest:
         assert object.__new__(SimpleRPC).call_rest is None
 
 
-# --- cancelling a streamed download that is waiting for its response headers ---
+# --- cancelling a streamed download ---
 
-def _stalling_server():
-    """A server that reads the request and never answers; returns (uri, release, close)."""
-    import socket
-    import threading
+def _stalling_server(reply=b'', tls=None):
+    """A server that reads the request, sends `reply` and then never answers more; returns (uri, close).
 
+    With `tls`, a server SSLContext, it speaks HTTPS.
+    """
     server = socket.socket()
     server.bind(('127.0.0.1', 0))
     server.listen()
@@ -896,10 +952,15 @@ def _stalling_server():
     release = threading.Event()
 
     def serve():
-        conn, _ = server.accept()
-        held.append(conn)
-        conn.recv(65536)
-        release.wait(10)
+        with contextlib.suppress(OSError):
+            conn, _ = server.accept()
+            held.append(conn)
+            if tls:
+                conn = tls.wrap_socket(conn, server_side=True)
+                held.append(conn)
+            conn.recv(65536)
+            conn.sendall(reply)
+            release.wait(10)
 
     threading.Thread(target=serve, daemon=True).start()
 
@@ -909,20 +970,45 @@ def _stalling_server():
             conn.close()
         server.close()
 
+    return f'{"https" if tls else "http"}://127.0.0.1:{server.getsockname()[1]}/', close
+
+
+def _tls_server_context():
+    context = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)
+    trustme.CA().issue_cert('127.0.0.1').configure_cert(context)
+    return context
+
+
+def _listener_that_never_accepts():
+    """The kernel completes the TCP handshake into the backlog, so a client's TLS handshake waits for good."""
+    server = socket.socket()
+    server.bind(('127.0.0.1', 0))
+    server.listen()
+    return f'https://127.0.0.1:{server.getsockname()[1]}/', server.close
+
+
+def _listener_whose_backlog_is_full():
+    """Linux drops a SYN to a listener whose accept queue is full, so a client's TCP connect waits."""
+    server = socket.socket()
+    server.bind(('127.0.0.1', 0))
+    server.listen(0)
+    filler = socket.create_connection(server.getsockname())
+
+    def close():
+        filler.close()
+        server.close()
+
     return f'http://127.0.0.1:{server.getsockname()[1]}/', close
 
 
 def _download_in_thread(uri, cancel, proxies=None):
-    import threading
-
-    from plaidcloud.rpc.connection.jsonrpc import cancellable_downloads
-
     outcome = []
 
     def run():
         try:
             with cancellable_downloads(cancel):
-                http_json_rpc(uri=uri, json_data={'method': next(iter(STREAM_ENDPOINTS)), 'params': {}}, proxies=proxies)
+                http_json_rpc(uri=uri, verify_ssl=False, proxies=proxies,
+                              json_data={'method': next(iter(STREAM_ENDPOINTS)), 'params': {}})
             outcome.append(None)
         except Exception as err:  # noqa: BLE001 - hand any failure back to the asserting thread
             outcome.append(err)
@@ -932,14 +1018,16 @@ def _download_in_thread(uri, cancel, proxies=None):
     return thread, outcome
 
 
-def test_cancel_unblocks_a_download_stalled_before_headers():
-    import time
+def _wait_until(condition, seconds=3):
+    deadline = time.monotonic() + seconds
+    while not condition():
+        assert time.monotonic() < deadline, 'timed out waiting'
+        time.sleep(0.02)
 
-    import requests
 
-    from plaidcloud.rpc.connection.jsonrpc import DownloadCancel
-
-    uri, close = _stalling_server()
+@pytest.mark.parametrize('scheme', ['http', 'https'])
+def test_cancel_unblocks_a_download_stalled_before_headers(scheme):
+    uri, close = _stalling_server(tls=_tls_server_context() if scheme == 'https' else None)
     cancel = DownloadCancel()
     thread, outcome = _download_in_thread(uri, cancel)
     try:
@@ -954,10 +1042,6 @@ def test_cancel_unblocks_a_download_stalled_before_headers():
 
 
 def test_cancelling_before_the_connection_exists_still_ends_the_download():
-    import requests
-
-    from plaidcloud.rpc.connection.jsonrpc import DownloadCancel
-
     uri, close = _stalling_server()
     cancel = DownloadCancel()
     cancel.cancel()
@@ -971,20 +1055,53 @@ def test_cancelling_before_the_connection_exists_still_ends_the_download():
 
 
 def test_cancel_unblocks_a_download_stalled_behind_a_proxy():
-    import requests
-
-    from plaidcloud.rpc.connection.jsonrpc import DownloadCancel
-
     proxy, close = _stalling_server()  # accepts the proxied request and never answers
     cancel = DownloadCancel()
     thread, outcome = _download_in_thread('http://plaid.invalid/', cancel, proxies={'http': proxy})
     try:
-        import time
         time.sleep(0.5)
         assert thread.is_alive()
         cancel.cancel()
         thread.join(3)
         assert not thread.is_alive()
         assert isinstance(outcome[0], requests.exceptions.ConnectionError)
+    finally:
+        close()
+
+
+def test_a_download_cancelled_mid_body_leaves_no_file(download_folder):
+    headers_and_a_first_chunk = (b'HTTP/1.1 200 OK\r\nContent-Type: text/plain; charset=utf-8\r\n'
+                                 b'Transfer-Encoding: chunked\r\n\r\n6\r\na,b,c\n\r\n')
+    uri, close = _stalling_server(reply=headers_and_a_first_chunk)
+    cancel = DownloadCancel()
+    thread, outcome = _download_in_thread(uri, cancel)
+    try:
+        _wait_until(lambda: os.listdir(download_folder))
+        cancel.cancel()
+        thread.join(3)
+        assert not thread.is_alive()
+        assert isinstance(outcome[0], requests.RequestException)
+        assert os.listdir(download_folder) == []
+    finally:
+        close()
+
+
+@pytest.mark.parametrize('stuck_listener', [
+    pytest.param(_listener_whose_backlog_is_full, id='tcp connect',
+                 marks=pytest.mark.skipif(sys.platform != 'linux', reason='Linux drops a SYN to a full backlog')),
+    pytest.param(_listener_that_never_accepts, id='tls handshake'),
+])
+def test_a_cancel_while_connecting_ends_the_download_at_the_connect_timeout(stuck_listener, monkeypatch):
+    monkeypatch.setattr(jsonrpc, 'DOWNLOAD_CONNECT_TIMEOUT', 1)
+    uri, close = stuck_listener()
+    cancel = DownloadCancel()
+    thread, outcome = _download_in_thread(uri, cancel)
+    try:
+        time.sleep(0.3)
+        assert thread.is_alive()
+        cancel.cancel()
+        thread.join(3)
+        assert not thread.is_alive()
+        assert isinstance(outcome[0], requests.exceptions.Timeout)
     finally:
         close()

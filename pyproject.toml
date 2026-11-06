@@ -60,6 +60,7 @@ test = [
     "opentelemetry-instrumentation-redis",
     "redis",
     "plaidcloud-config",
+    "trustme",
 ]
 full = [
     "chardet>=2.3.0",
