@@ -423,6 +423,10 @@ def _rest_error_detail(response):
         return response.text
 
 
+class RPCCancelledError(Exception):
+    """Raised in place of an RPC's retry once its `check_allow_transmit` says the RPC has been cancelled."""
+
+
 class RPCRetry(Retry):
     def __init__(self, *args: Any, check_allow_transmit: Callable[[], bool] | None = None, **kwargs: Any) -> None:
         """
@@ -460,7 +464,7 @@ class RPCRetry(Retry):
         if self.history:
             print(f'Hit Retry, Request History Looks Like: {self.history}')
         if not self.allow_transmit:
-            raise Exception('No more retries, RPC method has been cancelled')
+            raise RPCCancelledError('No more retries, RPC method has been cancelled')
         return super().increment(*args, **kwargs)
 
 
