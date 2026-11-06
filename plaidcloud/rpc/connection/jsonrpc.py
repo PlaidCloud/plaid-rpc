@@ -1,31 +1,28 @@
-# coding=utf-8
-
 import contextlib
 import os
+import socket
 import tempfile
 import threading
 from collections.abc import Callable, Iterator
 from concurrent.futures import Future
 from typing import Any
+from urllib.parse import urljoin
 
+import orjson as json
+import requests
 import urllib3
 import urllib3.exceptions
-import requests
-import socket
 from requests.adapters import HTTPAdapter
+from requests_futures.sessions import FuturesSession
+from toolz.dicttoolz import assoc
 from urllib3 import PoolManager
 from urllib3.connection import HTTPConnection, HTTPSConnection
 from urllib3.connectionpool import HTTPConnectionPool, HTTPSConnectionPool
-from requests_futures.sessions import FuturesSession
 from urllib3.util.retry import Retry
-import orjson as json
-from urllib.parse import urljoin
-
-from toolz.dicttoolz import assoc
 
 from plaidcloud.rpc.orjson import unsupported_object_json_encoder
+from plaidcloud.rpc.remote.rpc_common import WARNING_CODE, RPCError, next_call_id
 from plaidcloud.rpc.remote.rpc_tools import PlainRPCCommon
-from plaidcloud.rpc.remote.rpc_common import RPCError, WARNING_CODE, next_call_id
 from plaidcloud.rpc.telemetry import inject_trace_context
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
@@ -227,12 +224,10 @@ def http_json_rpc(token: str | None = None, uri: str | None = None, verify_ssl: 
         headers (dict, optional): Custom headers to send with the RPC
     """
     def auth_header() -> str:
-        return "Bearer {}".format(token)
+        return f"Bearer {token}"
 
     def streamable() -> bool:
-        if json_data and json_data.get('method') in STREAM_ENDPOINTS:
-            return True
-        return False
+        return bool(json_data) and json_data.get('method') in STREAM_ENDPOINTS
 
     headers = headers or {}
     headers["Content-Type"] = "application/json"
@@ -429,25 +424,25 @@ def _rest_error_detail(response):
 
 
 class RPCRetry(Retry):
-    def __init__(self, *args, check_allow_transmit=None, **kwargs):
+    def __init__(self, *args: Any, check_allow_transmit: Callable[[], bool] | None = None, **kwargs: Any) -> None:
         """
         Args:
             check_allow_transmit (callable, optional): Method to call to check if retries are still to be made
                 This can be used to prevent retry of RPC methods once a workflow has been cancelled and the RPC fails
         """
-        kwargs.update(dict(
+        kwargs.update(
             allowed_methods=['GET', 'POST', 'PUT', 'DELETE'],
             status_forcelist=[500, 502, 504],
             backoff_factor=0.1,
-        ))
+        )
         if 'connect' not in kwargs:
             kwargs['connect'] = 5
-        super(RPCRetry, self).__init__(*args, **kwargs)
+        super().__init__(*args, **kwargs)
         self.__check_allow_transmit = check_allow_transmit
 
-    def new(self, **kw):
-        kw.update(dict(check_allow_transmit=self.__check_allow_transmit))
-        return super(RPCRetry, self).new(**kw)
+    def new(self, **kw: Any) -> Retry:
+        kw.update(check_allow_transmit=self.__check_allow_transmit)
+        return super().new(**kw)
 
     @property
     def allow_transmit(self):
@@ -461,12 +456,12 @@ class RPCRetry(Retry):
             return check()
         return True
 
-    def increment(self, *args, **kwargs):
+    def increment(self, *args: Any, **kwargs: Any) -> Retry:
         if self.history:
             print(f'Hit Retry, Request History Looks Like: {self.history}')
         if not self.allow_transmit:
             raise Exception('No more retries, RPC method has been cancelled')
-        return super(RPCRetry, self).increment(*args, **kwargs)
+        return super().increment(*args, **kwargs)
 
 
 class SimpleRPC(PlainRPCCommon):
@@ -486,14 +481,16 @@ class SimpleRPC(PlainRPCCommon):
     """
     call_rest = None
 
-    def __init__(self, token, uri=None, verify_ssl=None, workspace=None, proxies=None, check_allow_transmit=None,
-                 retry=True, headers=None):
+    def __init__(self, token: str | Callable[[], str], uri: str | None = None, verify_ssl: bool | None = None,
+                 workspace: str | None = None, proxies: dict | None = None,
+                 check_allow_transmit: Callable[[], bool] | None = None, retry: bool = True,
+                 headers: dict | None = None) -> None:
         verify_ssl = bool(verify_ssl)
         self.__rpc_uri = uri
         self.__verify_ssl = verify_ssl
         self.__auth_token = token
 
-        def call_rpc(method_path, params, fire_and_forget=False):
+        def call_rpc(method_path: str, params: dict, fire_and_forget: bool = False) -> Any:
             if callable(token):
                 http_token = token()
             else:
@@ -538,7 +535,7 @@ class SimpleRPC(PlainRPCCommon):
             )
 
         self.call_rest = call_rest
-        super(SimpleRPC, self).__init__(call_rpc, check_allow_transmit)
+        super().__init__(call_rpc, check_allow_transmit)
 
     @property
     def verify_ssl(self):

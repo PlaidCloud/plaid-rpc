@@ -1,5 +1,4 @@
 #!/usr/bin/env python
-# coding=utf-8
 
 import contextlib
 import io
@@ -19,10 +18,18 @@ import urllib3
 
 from plaidcloud.rpc.connection import jsonrpc
 from plaidcloud.rpc.connection.jsonrpc import (
-    DownloadCancel, RPCRetry, SimpleRPC, cancellable_downloads, http_json_rpc, http_rest, STREAM_ENDPOINTS,
-    _get_session, _get_shared_session, _rpc_context,
+    STREAM_ENDPOINTS,
+    DownloadCancel,
+    RPCRetry,
+    SimpleRPC,
+    _get_session,
+    _get_shared_session,
+    _rpc_context,
+    cancellable_downloads,
+    http_json_rpc,
+    http_rest,
 )
-from plaidcloud.rpc.remote.rpc_common import RPCError, WARNING_CODE
+from plaidcloud.rpc.remote.rpc_common import WARNING_CODE, RPCError
 
 
 @pytest.fixture(autouse=True)
@@ -122,19 +129,13 @@ class TestRPCRetryIncrement:
 
     def test_increment_ok_when_allowed(self):
         retry = RPCRetry(check_allow_transmit=lambda: True, total=5)
-        try:
-            retry.increment()
-        except Exception as e:
-            assert 'cancelled' not in str(e)
+        assert retry.increment().total == 4
 
     def test_increment_with_history_prints(self, capsys):
         retry = RPCRetry(check_allow_transmit=lambda: True, total=5)
         from urllib3.util.retry import RequestHistory
         retry.history = (RequestHistory('GET', 'https://e.com', None, 500, None),)
-        try:
-            retry.increment()
-        except Exception:
-            pass
+        retry.increment()
         captured = capsys.readouterr()
         assert 'Hit Retry' in captured.out
 
@@ -165,10 +166,9 @@ class TestGetSession:
 
     def test_fresh_session_closed_on_exception(self):
         captured = {}
-        with pytest.raises(RuntimeError):
-            with _get_session() as s:
-                captured['close'] = s.close = mock.Mock(wraps=s.close)
-                raise RuntimeError('boom')
+        with pytest.raises(RuntimeError), _get_session() as s:
+            captured['close'] = s.close = mock.Mock(wraps=s.close)
+            raise RuntimeError('boom')
         captured['close'].assert_called_once()
 
     def test_futures_session(self):
@@ -326,12 +326,14 @@ class TestHttpJsonRpcFreshSession:
     def test_exception_reraises(self):
         session = mock.MagicMock()
         session.post.side_effect = RuntimeError('network broke')
-        with mock.patch.object(jsonrpc, '_get_session', _patched_get_session(session)):
-            with pytest.raises(RuntimeError, match='network broke'):
-                http_json_rpc(
-                    token='t', uri='https://example.com/rpc', verify_ssl=True,
-                    json_data={'method': 'm', 'params': {}}, retry=False,
-                )
+        with (
+            mock.patch.object(jsonrpc, '_get_session', _patched_get_session(session)),
+            pytest.raises(RuntimeError, match='network broke'),
+        ):
+            http_json_rpc(
+                token='t', uri='https://example.com/rpc', verify_ssl=True,
+                json_data={'method': 'm', 'params': {}}, retry=False,
+            )
 
     def test_custom_headers_merged(self):
         session = mock.MagicMock()
@@ -425,13 +427,15 @@ class TestHttpJsonRpcSharedSession:
     def test_thread_local_cleared_on_exception(self):
         session = mock.MagicMock()
         session.post.side_effect = RuntimeError('boom')
-        with mock.patch.object(jsonrpc, '_get_session', _patched_get_session(session)):
-            with pytest.raises(RuntimeError):
-                http_json_rpc(
-                    token='t', uri='https://example.com/rpc', verify_ssl=True,
-                    json_data={'method': 'm', 'params': {}}, retry=True,
-                    check_allow_transmit=lambda: True,
-                )
+        with (
+            mock.patch.object(jsonrpc, '_get_session', _patched_get_session(session)),
+            pytest.raises(RuntimeError),
+        ):
+            http_json_rpc(
+                token='t', uri='https://example.com/rpc', verify_ssl=True,
+                json_data={'method': 'm', 'params': {}}, retry=True,
+                check_allow_transmit=lambda: True,
+            )
         assert getattr(_rpc_context, 'check_allow_transmit', None) is None
 
 
