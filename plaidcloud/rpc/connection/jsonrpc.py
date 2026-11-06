@@ -4,7 +4,8 @@ import contextlib
 import os
 import tempfile
 import threading
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
+from concurrent.futures import Future
 from typing import Any
 
 import urllib3
@@ -12,6 +13,7 @@ import urllib3.exceptions
 import requests
 import socket
 from requests.adapters import HTTPAdapter
+from urllib3 import PoolManager
 from urllib3.connection import HTTPConnection, HTTPSConnection
 from urllib3.connectionpool import HTTPConnectionPool, HTTPSConnectionPool
 from requests_futures.sessions import FuturesSession
@@ -42,6 +44,9 @@ STREAM_ENDPOINTS = {
 
 REST_ROOT = '/rest/v1/'
 REST_DOWNLOAD_CHUNK_BYTES = 1024 * 1024
+# Bounds a streamed download's TCP connect and TLS handshake. Its reads stay unbounded: download_csv sends
+# its response headers only once its query has run.
+DOWNLOAD_CONNECT_TIMEOUT = 30
 
 download_folder = os.path.join(tempfile.gettempdir(), "plaid/download")
 
@@ -96,15 +101,17 @@ def _get_shared_session():
 
 class DownloadCancel:
     """Ends a streamed download from another thread: `cancel()` shuts the download's socket down, which
-    unblocks the thread even while it waits for the server's response headers. Use it with
-    `cancellable_downloads`; the blocked call then raises a requests ConnectionError."""
+    unblocks the thread even while it waits for the server's response headers, and the blocked call raises a
+    requests exception. Use it with `cancellable_downloads`. A socket is known only once it has connected, so a
+    cancel made while it is still connecting takes effect then, or when the connect gives up after
+    DOWNLOAD_CONNECT_TIMEOUT seconds."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         self._lock = threading.Lock()
-        self._sockets = []
+        self._sockets: list[socket.socket] = []
         self.cancelled = False
 
-    def _add(self, sock):
+    def _add(self, sock: socket.socket) -> None:
         with self._lock:
             self._sockets = [s for s in self._sockets if s.fileno() != -1]
             self._sockets.append(sock)
@@ -113,11 +120,11 @@ class DownloadCancel:
             self._shutdown(sock)
 
     @staticmethod
-    def _shutdown(sock):
+    def _shutdown(sock: socket.socket) -> None:
         with contextlib.suppress(OSError):
             sock.shutdown(socket.SHUT_RDWR)
 
-    def cancel(self):
+    def cancel(self) -> None:
         with self._lock:
             self.cancelled = True
             sockets = list(self._sockets)
@@ -126,7 +133,7 @@ class DownloadCancel:
 
 
 @contextlib.contextmanager
-def cancellable_downloads(cancel: DownloadCancel):
+def cancellable_downloads(cancel: DownloadCancel) -> Iterator[None]:
     """Streamed downloads (download_csv and its siblings) made on this thread inside the block can be
     ended with `cancel.cancel()`."""
     _rpc_context.download_cancel = cancel
@@ -139,16 +146,16 @@ def cancellable_downloads(cancel: DownloadCancel):
 class _CancellableAdapter(HTTPAdapter):
     """Records each connection's socket with a DownloadCancel as it connects."""
 
-    def __init__(self, cancel, **kwargs):
+    def __init__(self, cancel: DownloadCancel, **kwargs: Any) -> None:
         self._download_cancel = cancel
         super().__init__(**kwargs)
 
-    def _record_sockets(self, manager):
+    def _record_sockets(self, manager: PoolManager) -> PoolManager:
         cancel = self._download_cancel
 
-        def recording(connection_cls):
+        def recording(connection_cls: type[HTTPConnection]) -> type[HTTPConnection]:
             class Recording(connection_cls):
-                def connect(self):
+                def connect(self) -> None:
                     super().connect()
                     cancel._add(self.sock)
             return Recording
@@ -162,16 +169,17 @@ class _CancellableAdapter(HTTPAdapter):
         manager.pool_classes_by_scheme = {'http': Pool, 'https': SecurePool}
         return manager
 
-    def init_poolmanager(self, *args, **kwargs):
+    def init_poolmanager(self, *args: Any, **kwargs: Any) -> None:
         super().init_poolmanager(*args, **kwargs)
         self._record_sockets(self.poolmanager)
 
-    def proxy_manager_for(self, *args, **kwargs):
+    def proxy_manager_for(self, *args: Any, **kwargs: Any) -> PoolManager:
         return self._record_sockets(super().proxy_manager_for(*args, **kwargs))
 
 
 @contextlib.contextmanager
-def _get_session(*, shared=False, futures=False, retry_obj=0, cancel=None):
+def _get_session(*, shared: bool = False, futures: bool = False, retry_obj: Retry | int = 0,
+                 cancel: DownloadCancel | None = None) -> Iterator[requests.Session]:
     """Yield a requests Session configured for an RPC call.
 
     - shared=True: yield the lazily-built module-level Session. `futures` and `retry_obj`
@@ -196,13 +204,17 @@ def _get_session(*, shared=False, futures=False, retry_obj=0, cancel=None):
         session.close()
 
 
-def http_json_rpc(token=None, uri=None, verify_ssl=None, json_data=None, proxies=None,
-                  fire_and_forget=False, check_allow_transmit=None, retry=True, headers=None):
+def http_json_rpc(token: str | None = None, uri: str | None = None, verify_ssl: bool | None = None,
+                  json_data: dict | None = None, proxies: dict | None = None, fire_and_forget: bool = False,
+                  check_allow_transmit: Callable[[], bool] | None = None, retry: bool = True,
+                  headers: dict | None = None) -> dict | str | None:
     """
     Sends a json_rpc request over http.
 
     Returns:
-        dict: The decoded response from the server.
+        dict: The decoded response from the server. For a method in STREAM_ENDPOINTS, the path of a file in
+            `download_folder` holding the streamed body instead, unless the server answered with a JSON-RPC
+            envelope. None for fire_and_forget.
     Args:
         token (str): oauth2 token
         uri (str): the server uri to connect to
@@ -214,10 +226,10 @@ def http_json_rpc(token=None, uri=None, verify_ssl=None, json_data=None, proxies
         retry (bool, optional): Whether or not to use retry at all, default True
         headers (dict, optional): Custom headers to send with the RPC
     """
-    def auth_header():
+    def auth_header() -> str:
         return "Bearer {}".format(token)
 
-    def streamable():
+    def streamable() -> bool:
         if json_data and json_data.get('method') in STREAM_ENDPOINTS:
             return True
         return False
@@ -240,22 +252,15 @@ def http_json_rpc(token=None, uri=None, verify_ssl=None, json_data=None, proxies
     payload = json.dumps(json_data, default=unsupported_object_json_encoder, option=json.OPT_NAIVE_UTC | json.OPT_NON_STR_KEYS)
 
     if streamable():
-        with _get_session(retry_obj=0, cancel=getattr(_rpc_context, 'download_cancel', None)) as session:
-            handle, file_name = tempfile.mkstemp(dir=download_folder, prefix="download_", suffix=".tmp")
-            os.close(handle)  # Can't control the access mode, so close this one and open another.
-            with open(file_name, 'wb') as tmp_file:
-                with session.post(uri, headers=headers, data=payload, verify=verify_ssl, proxies=proxies,
-                                  allow_redirects=False, stream=True) as response:
-                    response.raise_for_status()
-                    try:
-                        result = response.json()
-                        if isinstance(result, dict):
-                            return result
-                    except Exception:  # JSONDecodeError: Should be this, but which library? json or simplejson - depends what is installed
-                        pass
-                    for chunk in response.iter_content(chunk_size=None):
-                        tmp_file.write(chunk)
-            return file_name
+        with (
+            _get_session(retry_obj=0, cancel=getattr(_rpc_context, 'download_cancel', None)) as session,
+            session.post(uri, headers=headers, data=payload, verify=verify_ssl, proxies=proxies, allow_redirects=False,
+                         stream=True, timeout=(DOWNLOAD_CONNECT_TIMEOUT, None)) as response,
+        ):
+            response.raise_for_status()
+            if response.headers.get('Content-Type', '').partition(';')[0].strip().lower() == 'application/json':
+                return response.json()
+            return _download_to_a_temp_file(response)
     elif fire_and_forget:
         retry_obj = RPCRetry(check_allow_transmit=check_allow_transmit) if retry else 0
         with _get_session(futures=True, retry_obj=retry_obj) as session:
@@ -263,7 +268,7 @@ def http_json_rpc(token=None, uri=None, verify_ssl=None, json_data=None, proxies
                                     allow_redirects=False)
 
             # Adding a callback that will raise an exception if there was a problem with the request
-            def on_request_complete(request_future):
+            def on_request_complete(request_future: Future) -> None:
                 try:
                     response = request_future.result()
                     response.raise_for_status()
@@ -296,6 +301,23 @@ def http_json_rpc(token=None, uri=None, verify_ssl=None, json_data=None, proxies
                 raise
             finally:
                 _rpc_context.check_allow_transmit = None
+
+
+def _download_to_a_temp_file(response: requests.Response) -> str:
+    """Writes a streamed download's body to a new file in `download_folder` a chunk at a time, returning its path.
+
+    A failure part way, a DownloadCancel's or a body cut off short of its Content-Length included, removes the file.
+    """
+    handle, file_name = tempfile.mkstemp(dir=download_folder, prefix='download_', suffix='.tmp')
+    try:
+        with os.fdopen(handle, 'wb') as file:
+            file.writelines(response.iter_content(chunk_size=REST_DOWNLOAD_CHUNK_BYTES))
+        _raise_for_a_cut_off_body(response)
+    except BaseException:
+        with contextlib.suppress(OSError):
+            os.remove(file_name)
+        raise
+    return file_name
 
 
 def http_rest(token: str | None, uri: str, http_method: str, path: str, verify_ssl: bool | None = None,
