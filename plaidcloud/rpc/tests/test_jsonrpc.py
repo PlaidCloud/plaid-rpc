@@ -20,6 +20,7 @@ from plaidcloud.rpc.connection import jsonrpc
 from plaidcloud.rpc.connection.jsonrpc import (
     STREAM_ENDPOINTS,
     DownloadCancel,
+    RPCCancelledError,
     RPCRetry,
     SimpleRPC,
     _get_session,
@@ -124,8 +125,17 @@ class TestRPCRetryIncrement:
 
     def test_increment_raises_when_transmit_blocked(self):
         retry = RPCRetry(check_allow_transmit=lambda: False)
-        with pytest.raises(Exception, match='RPC method has been cancelled'):
+        with pytest.raises(RPCCancelledError, match='RPC method has been cancelled'):
             retry.increment()
+
+    def test_a_cancelled_call_raises_its_own_error_rather_than_an_rpc_error(self):
+        uri, close = _stalling_server(reply=b'HTTP/1.1 500 Internal Server Error\r\nContent-Length: 0\r\n\r\n')
+        try:
+            with pytest.raises(RPCCancelledError) as raised:
+                http_json_rpc(uri=uri, json_data={'method': 'm', 'params': {}}, check_allow_transmit=lambda: False)
+        finally:
+            close()
+        assert not isinstance(raised.value, RPCError)
 
     def test_increment_ok_when_allowed(self):
         retry = RPCRetry(check_allow_transmit=lambda: True, total=5)
