@@ -63,20 +63,24 @@ def _references(params, result):
 
 
 def _dimension_value(params):
-    # REST requires both maps, reads a null agg_function as 'sum', and has no max_concurrent
+    # REST requires both maps and a bool strict_filters, reads a null agg_function as 'sum', and has no max_concurrent
     if params.get('filter_values') is None or params.get('column_dimension_map') is None:
         return None
     if ('agg_function' in params and params['agg_function'] is None) or 'max_concurrent' in params:
         return None
-    return params
+    return params if isinstance(params.get('strict_filters', False), bool) else None
+
+
+def _dimension_batch_item(item):
+    return (isinstance(item, dict) and isinstance(item.get('value_column'), str) and isinstance(item.get('agg', ''), str)
+            and isinstance(item.get('filter_values', {}), dict) and isinstance(item.get('column_dimension_map', {}), dict))
 
 
 def _dimension_batch(params):
-    # REST fills an absent agg or map with its default but refuses an explicit null
+    # RPC answers a malformed item with that item's own error status, and too many items with its own message;
+    # REST refuses the whole call with a 422
     requests = params.get('requests')
-    if not isinstance(requests, list) or any(
-            not isinstance(r, dict) or None in (r.get('agg', ''), r.get('filter_values', {}), r.get('column_dimension_map', {}))
-            for r in requests):
+    if not isinstance(requests, list) or len(requests) > 10_000 or not all(map(_dimension_batch_item, requests)):
         return None
     return params
 
