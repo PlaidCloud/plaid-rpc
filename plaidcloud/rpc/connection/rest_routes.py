@@ -62,6 +62,25 @@ def _references(params, result):
     return {ids[0]: result} if isinstance(ids, list) and isinstance(result, list) else result
 
 
+def _dimension_value(params):
+    # REST requires both maps, reads a null agg_function as 'sum', and has no max_concurrent
+    if params.get('filter_values') is None or params.get('column_dimension_map') is None:
+        return None
+    if ('agg_function' in params and params['agg_function'] is None) or 'max_concurrent' in params:
+        return None
+    return params
+
+
+def _dimension_batch(params):
+    # REST fills an absent agg or map with its default but refuses an explicit null
+    requests = params.get('requests')
+    if not isinstance(requests, list) or any(
+            not isinstance(r, dict) or None in (r.get('agg', ''), r.get('filter_values', {}), r.get('column_dimension_map', {}))
+            for r in requests):
+        return None
+    return params
+
+
 def _publish_sample_status(status, body):
     # REST answers the statuses RPC returned (no_sample, running, not_yet_run) as a 409 or 425
     data = (body or {}).get('data')
@@ -98,6 +117,9 @@ REST_ROUTES = {
     'analyze/project/variables': Route('GET', 'analyze/project/variables'),
     'analyze/query/dialect': Route('GET', 'analyze/query/dialect'),
     'analyze/query/upsert': Route('POST', 'analyze/query/upsert'),
+    'analyze/query/retrieve_dimension_batch': Route('POST', 'analyze/query/retrieve-dimension-batch', adapt=_dimension_batch),
+    'analyze/query/retrieve_dimension_value': Route('POST', 'analyze/query/retrieve-dimension-value', adapt=_dimension_value),
+    'analyze/query/retrieve_dimension_values': Route('POST', 'analyze/query/retrieve-dimension-values', adapt=_dimension_value),
     'analyze/step/log': Route('POST', 'analyze/step/log'),
     'analyze/step/lookup_by_full_path': Route('GET', 'analyze/step/lookup-by-full-path'),
     'analyze/step/lookup_by_name': Route('GET', 'analyze/step/lookup-by-name'),
