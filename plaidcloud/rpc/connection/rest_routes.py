@@ -62,6 +62,29 @@ def _references(params, result):
     return {ids[0]: result} if isinstance(ids, list) and isinstance(result, list) else result
 
 
+def _dimension_value(params):
+    # REST requires both maps and a bool strict_filters, reads a null agg_function as 'sum', and has no max_concurrent
+    if params.get('filter_values') is None or params.get('column_dimension_map') is None:
+        return None
+    if ('agg_function' in params and params['agg_function'] is None) or 'max_concurrent' in params:
+        return None
+    return params if isinstance(params.get('strict_filters', False), bool) else None
+
+
+def _dimension_batch_item(item):
+    return (isinstance(item, dict) and isinstance(item.get('value_column'), str) and isinstance(item.get('agg', ''), str)
+            and isinstance(item.get('filter_values', {}), dict) and isinstance(item.get('column_dimension_map', {}), dict))
+
+
+def _dimension_batch(params):
+    # RPC answers a malformed item with that item's own error status, and too many items with its own message;
+    # REST refuses the whole call with a 422
+    requests = params.get('requests')
+    if not isinstance(requests, list) or len(requests) > 10_000 or not all(map(_dimension_batch_item, requests)):
+        return None
+    return params
+
+
 def _publish_sample_status(status, body):
     # REST answers the statuses RPC returned (no_sample, running, not_yet_run) as a 409 or 425
     data = (body or {}).get('data')
@@ -98,6 +121,9 @@ REST_ROUTES = {
     'analyze/project/variables': Route('GET', 'analyze/project/variables'),
     'analyze/query/dialect': Route('GET', 'analyze/query/dialect'),
     'analyze/query/upsert': Route('POST', 'analyze/query/upsert'),
+    'analyze/query/retrieve_dimension_batch': Route('POST', 'analyze/query/retrieve-dimension-batch', adapt=_dimension_batch),
+    'analyze/query/retrieve_dimension_value': Route('POST', 'analyze/query/retrieve-dimension-value', adapt=_dimension_value),
+    'analyze/query/retrieve_dimension_values': Route('POST', 'analyze/query/retrieve-dimension-values', adapt=_dimension_value),
     'analyze/step/log': Route('POST', 'analyze/step/log'),
     'analyze/step/lookup_by_full_path': Route('GET', 'analyze/step/lookup-by-full-path'),
     'analyze/step/lookup_by_name': Route('GET', 'analyze/step/lookup-by-name'),
