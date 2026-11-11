@@ -210,7 +210,6 @@ def test_no_content_response_is_none(transport):
       'strict_filters': 'false'}),
     ('document/view/download_stream', {'account_id': 'a'}),
     ('analyze/table/not_a_routed_method', {'project_id': 'p'}),
-    ('analyze/query/download_csv', {'project_id': 'p'}),
 ])
 def test_unroutable_call_falls_back_to_json_rpc(transport, method_path, params):
     client, rest, json_rpc = transport

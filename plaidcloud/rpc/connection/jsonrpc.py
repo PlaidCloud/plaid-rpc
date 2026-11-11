@@ -20,7 +20,7 @@ from urllib3.connection import HTTPConnection, HTTPSConnection
 from urllib3.connectionpool import HTTPConnectionPool, HTTPSConnectionPool
 from urllib3.util.retry import Retry
 
-from plaidcloud.rpc.connection.rest_routes import RouteMissing, error_body, rest_error, rest_request, route_missing
+from plaidcloud.rpc.connection.rest_routes import REST_ROUTES, RouteMissing, error_body, rest_error, rest_request, route_missing
 from plaidcloud.rpc.orjson import unsupported_object_json_encoder
 from plaidcloud.rpc.remote.rpc_common import WARNING_CODE, RPCError, next_call_id
 from plaidcloud.rpc.remote.rpc_tools import PlainRPCCommon
@@ -42,6 +42,10 @@ STREAM_ENDPOINTS = {
 
 REST_ROOT = '/rest/v1/'
 REST_DOWNLOAD_CHUNK_BYTES = 1024 * 1024
+# A streamed REST download answered 429 before its body starts is retried after Retry-After, at most this many
+# times and for this long in all, since the rate limit is per client IP and often clears within seconds.
+REST_DOWNLOAD_MAX_429_RETRIES = 3
+REST_DOWNLOAD_MAX_429_WAIT = 120
 # Bounds each of a streamed download's TCP connect attempts (one per address the host resolves to) and its TLS
 # handshake. Its reads stay unbounded: download_csv sends its response headers only once its query has run.
 DOWNLOAD_CONNECT_TIMEOUT = 30
@@ -118,6 +122,7 @@ class DownloadCancel:
         self._lock = threading.Lock()
         self._sockets: list[socket.socket] = []
         self.cancelled = False
+        self.stopped = threading.Event()  # set by cancel(), to end a wait between attempts
 
     def _add(self, sock: socket.socket) -> None:
         with self._lock:
@@ -136,6 +141,7 @@ class DownloadCancel:
         with self._lock:
             self.cancelled = True
             sockets = list(self._sockets)
+        self.stopped.set()
         for sock in sockets:
             self._shutdown(sock)
 
@@ -241,7 +247,7 @@ def http_json_rpc(token: str | None = None, uri: str | None = None, verify_ssl: 
     def streamable() -> bool:
         return bool(json_data) and json_data.get('method') in STREAM_ENDPOINTS
 
-    headers = headers or {}
+    headers = dict(headers or {})
     headers["Content-Type"] = "application/json"
     if token:
         headers["Authorization"] = auth_header()
@@ -327,10 +333,10 @@ def _download_to_a_temp_file(response: requests.Response) -> str:
     return file_name
 
 
-def http_rest(token: str | None, uri: str, http_method: str, path: str, verify_ssl: bool | None = None,
+def http_rest(token: str | Callable[[], str] | None, uri: str, http_method: str, path: str, verify_ssl: bool | None = None,
               params: dict | None = None, body: Any = None, proxies: dict | None = None,
               check_allow_transmit: Callable[[], bool] | None = None, retry: bool = True, headers: dict | None = None,
-              to_file: str | os.PathLike[str] | None = None) -> Any:
+              to_file: str | os.PathLike[str] | None = None, stream_download: bool = False) -> Any:
     """
     Sends a request to the PlaidCloud REST API on the host that serves `uri`.
 
@@ -338,7 +344,7 @@ def http_rest(token: str | None, uri: str, http_method: str, path: str, verify_s
         The decoded JSON response, or None when the response has no body. With `to_file`, that path, now
         holding the response's body.
     Args:
-        token (str): oauth2 token
+        token (str or callable): oauth2 token, or a callable giving one, called for each attempt
         uri (str): the server's JSON-RPC uri. Only its host is used — the REST API is found at
             /rest/v1 on that host, so a path prefix on `uri` is not preserved
         http_method (str): GET, POST, PUT or DELETE
@@ -354,6 +360,12 @@ def http_rest(token: str | None, uri: str, http_method: str, path: str, verify_s
         to_file (str or path-like, optional): a path to write the response's body to as it arrives, rather
             than decode it, for a download too large to hold in memory. The body replaces whatever is at
             the path only once all of it has arrived, so a download that fails leaves that as it was.
+        stream_download (bool, optional): write the body to a new file in `download_folder` and return its
+            path, as /json-rpc did for a streamed download (`to_file` is not used):
+            a DownloadCancel from `cancellable_downloads` ends it, its connect is bounded by
+            DOWNLOAD_CONNECT_TIMEOUT and its reads are not, and nothing is retried once the body starts. A 429
+            answered before the body is retried after its Retry-After, at most REST_DOWNLOAD_MAX_429_RETRIES
+            times and REST_DOWNLOAD_MAX_429_WAIT seconds in all.
     Raises:
         RPCError: for anything but a 2xx, with the status as `code`, so a caller already handling RPC
             failures handles these the same way. Redirects are not followed, so a 3xx raises rather
@@ -362,28 +374,55 @@ def http_rest(token: str | None, uri: str, http_method: str, path: str, verify_s
             Content-Length, whichever urllib3 is installed.
     """
     headers = dict(headers or {})
-    if token:
-        headers['Authorization'] = f'Bearer {token}'
     data = None
     if body is not None:
         headers['Content-Type'] = 'application/json'
         data = json.dumps(body, default=unsupported_object_json_encoder, option=json.OPT_NAIVE_UTC | json.OPT_NON_STR_KEYS)
     inject_trace_context(headers)
 
-    with _get_session(shared=retry, rest=True) as session:
+    cancel = getattr(_rpc_context, 'download_cancel', None)
+    sessions = {'cancel': cancel, 'shared': False} if stream_download else {'shared': retry}
+    with _get_session(rest=True, **sessions) as session:
         _rpc_context.check_allow_transmit = check_allow_transmit
+        waited = 0
+        stopped = cancel.stopped if cancel else threading.Event()
         try:
-            response = session.request(
-                http_method, urljoin(uri, REST_ROOT + path.lstrip('/')), params=params, data=data,
-                headers=headers, verify=verify_ssl, proxies=proxies, allow_redirects=False,
-                stream=to_file is not None,
-            )
+            for attempt in range(REST_DOWNLOAD_MAX_429_RETRIES + 1):
+                bearer = token() if callable(token) else token
+                response = session.request(
+                    http_method, urljoin(uri, REST_ROOT + path.lstrip('/')), params=params, data=data,
+                    headers={**headers, 'Authorization': f'Bearer {bearer}'} if bearer else headers,
+                    verify=verify_ssl, proxies=proxies, allow_redirects=False,
+                    stream=to_file is not None or stream_download,
+                    timeout=(DOWNLOAD_CONNECT_TIMEOUT, None) if stream_download else None,
+                )
+                if not (stream_download and response.status_code == 429):
+                    break
+                wait = _retry_after(response)
+                if attempt == REST_DOWNLOAD_MAX_429_RETRIES or waited + wait > REST_DOWNLOAD_MAX_429_WAIT:
+                    break
+                response.close()
+                waited += wait
+                if stopped.wait(wait) or (check_allow_transmit and not check_allow_transmit()):
+                    raise RPCCancelledError('No more retries, RPC method has been cancelled')
         finally:
             _rpc_context.check_allow_transmit = None
+        if stream_download:
+            with response:
+                _raise_for_rest_error(response)
+                return _download_to_a_temp_file(response)
         if to_file is not None:
             return _rest_body_to_file(response, to_file)
     _raise_for_rest_error(response)
     return json.loads(response.content) if response.content else None
+
+
+def _retry_after(response: requests.Response) -> float:
+    """The seconds a 429's Retry-After asks for; 1 when it gives none, or a date."""
+    try:
+        return max(0.0, float(response.headers.get('Retry-After')))
+    except (TypeError, ValueError):
+        return 1.0
 
 
 def _rest_body_to_file(response: requests.Response, to_file: str | os.PathLike[str]) -> str | os.PathLike[str]:
@@ -491,13 +530,16 @@ class SimpleRPC(PlainRPCCommon):
     With `to_file`, it writes the response's body to that path as it arrives instead of decoding it:
     rpc.call_rest('GET', 'document/view/download-file', params={'account_id': account_id, 'path': path},
                   to_file=local_path)
+
+    With `rest_only`, nothing is sent to /json-rpc: a method with no REST route, or that the tenant has no route
+    for, raises RPCError with code -32601, and one whose arguments REST cannot take, -32602.
     """
     call_rest = None
 
     def __init__(self, token: str | Callable[[], str], uri: str | None = None, verify_ssl: bool | None = None,
                  workspace: str | None = None, proxies: dict | None = None,
                  check_allow_transmit: Callable[[], bool] | None = None, retry: bool = True,
-                 headers: dict | None = None) -> None:
+                 headers: dict | None = None, rest_only: bool = False) -> None:
         verify_ssl = bool(verify_ssl)
         self.__rpc_uri = uri
         self.__verify_ssl = verify_ssl
@@ -509,13 +551,19 @@ class SimpleRPC(PlainRPCCommon):
                 try:
                     return call_routed(request)
                 except RouteMissing:
-                    pass  # a tenant on an older tag has no such route; its /json-rpc still has the method
+                    if rest_only:
+                        raise RPCError(f'{method_path} is not available on this server', code=-32601) from None
+                    # a tenant on an older tag has no such route; its /json-rpc still has the method
                 except Exception:
                     # Fire-and-forget never raised: json-rpc's future swallowed the failure after the send
                     if not fire_and_forget:
                         raise
                     print(f'Exception for method {method_path}')
                     return None
+            if rest_only:
+                if method_path in REST_ROUTES:
+                    raise RPCError(f'{method_path} cannot be sent these arguments over REST', code=-32602)
+                raise RPCError(f'{method_path} is not available on this server', code=-32601)
             if callable(token):
                 http_token = token()
             else:
@@ -558,7 +606,8 @@ class SimpleRPC(PlainRPCCommon):
             if request.verb is None:
                 return request.finish(None)
             try:
-                result = call_rest(request.verb, request.path, params=request.query, body=request.body)
+                result = call_rest(request.verb, request.path, params=request.query, body=request.body,
+                                   stream_download=request.stream)
             except RPCError as error:
                 status, body = error.code, error_body(error)
                 if route_missing(status, body):
@@ -568,13 +617,13 @@ class SimpleRPC(PlainRPCCommon):
             return request.finish(result) if request.finish else result
 
         def call_rest(http_method: str, path: str, params: dict | None = None, body: Any = None,
-                      to_file: str | os.PathLike[str] | None = None) -> Any:
+                      to_file: str | os.PathLike[str] | None = None, stream_download: bool = False) -> Any:
             if not self.allow_transmit:
                 return None
             return http_rest(
-                token() if callable(token) else token, uri, http_method, path, verify_ssl,
+                token, uri, http_method, path, verify_ssl,
                 params=params, body=body, proxies=proxies, check_allow_transmit=check_allow_transmit,
-                retry=retry, headers=headers, to_file=to_file,
+                retry=retry, headers=headers, to_file=to_file, stream_download=stream_download,
             )
 
         self.call_rest = call_rest

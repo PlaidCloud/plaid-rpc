@@ -25,6 +25,7 @@ class Route(NamedTuple):
     empty: tuple | None = None  # (list param, result): an empty list is answered without a request
     finish: Callable[[dict, Any], Any] | None = None  # (params, REST result) -> the result RPC returned
     recover: Callable[[int, dict], Any] | None = None  # (status, error body) -> RPC's result for an error REST raises
+    stream: bool = False  # the body is written to a temp file whose path is the result
 
 
 def _step_state(params):
@@ -119,6 +120,8 @@ REST_ROUTES = {
     'analyze/project/projects': Route('GET', 'analyze/project/projects'),
     'analyze/project/variable_values': Route('GET', 'analyze/project/variable-values'),
     'analyze/project/variables': Route('GET', 'analyze/project/variables'),
+    'analyze/query/download_arrow': Route('POST', 'analyze/query/arrow', stream=True),
+    'analyze/query/download_csv': Route('POST', 'analyze/query/csv', stream=True),
     'analyze/query/dialect': Route('GET', 'analyze/query/dialect'),
     'analyze/query/upsert': Route('POST', 'analyze/query/upsert'),
     'analyze/query/retrieve_dimension_batch': Route('POST', 'analyze/query/retrieve-dimension-batch', adapt=_dimension_batch),
@@ -228,6 +231,7 @@ class Request(NamedTuple):
     body: dict | None
     finish: Callable[[Any], Any] | None
     recover: Callable[[int, dict], Any]
+    stream: bool = False
 
 
 class RouteMissing(Exception):
@@ -301,5 +305,5 @@ def rest_request(method_path, params):
             params['sort'] = [f"{key}:{'desc' if reverse else 'asc'}" for key, reverse in params['sort']]
         query = {k: [_query_value(i) for i in v] if isinstance(v, (list, tuple, set)) else _query_value(v)
                  for k, v in params.items()}
-        return Request(route.verb, route.path, query, None, finish, recover)
-    return Request(route.verb, route.path, None, params, finish, recover)
+        return Request(route.verb, route.path, query, None, finish, recover, route.stream)
+    return Request(route.verb, route.path, None, params, finish, recover, route.stream)

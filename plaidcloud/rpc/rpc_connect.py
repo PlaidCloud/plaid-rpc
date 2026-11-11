@@ -4,15 +4,17 @@
 """Basic class that allows for a handler that wraps the plaid RPC API.
    Gracefully handles oauth token generation."""
 
-from urllib.parse import urlencode
-import yaml
-import requests
 import uuid
 from concurrent.futures import ThreadPoolExecutor
+from importlib.metadata import version
+from urllib.parse import urlencode
 
+import requests
+import yaml
+
+from plaidcloud.rpc.config import PlaidConfig, PlaidXLConfig
 from plaidcloud.rpc.connection.jsonrpc import SimpleRPC
 from plaidcloud.rpc.remote import listener
-from plaidcloud.rpc.config import PlaidConfig, PlaidXLConfig
 
 __author__ = 'Charlie Laymon'
 __maintainer__ = 'Charlie Laymon <charlie.laymon@tartansolutions.com>'
@@ -188,4 +190,6 @@ class PlaidXLConnect(SimpleRPC, PlaidXLConfig):
         # installs already in the field. It is also the surface most exposed to a corporate
         # TLS-inspecting proxy whose root CA is in the OS trust store and not in certifi's, and
         # the slowest to roll back. Callers opt in with verify_ssl=True.
-        SimpleRPC.__init__(self, self.auth_token, uri=self.rpc_uri, verify_ssl=verify_ssl)
+        # PlaidXL reaches a tenant over REST alone; it must never fall back to /json-rpc.
+        SimpleRPC.__init__(self, self.auth_token, uri=self.rpc_uri, verify_ssl=verify_ssl, rest_only=True,
+                           headers={'X-PlaidCloud-Client': f'plaidxl/{version("plaidcloud-rpc")}'})
