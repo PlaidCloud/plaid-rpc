@@ -624,7 +624,7 @@ class TestSimpleRPCCallPath:
         with mock.patch.object(jsonrpc, 'http_json_rpc',
                                return_value='/tmp/download_file'):
             rpc = SimpleRPC('token', uri='https://example.com')
-            assert rpc.analyze.query.download_csv() == '/tmp/download_file'
+            assert rpc.document.view.download_stream() == '/tmp/download_file'
 
     def test_callable_token_is_invoked(self):
         calls = {'n': 0}
@@ -919,14 +919,15 @@ class TestSimpleRPCCallRest:
     def test_forwards_the_connections_settings(self):
         check = mock.Mock(return_value=True)
         with mock.patch.object(jsonrpc, 'http_rest', return_value={'ok': 1}) as mock_rest:
-            rpc = SimpleRPC(lambda: 'tok', uri='https://example.com/json-rpc/', verify_ssl=True,
+            provider = lambda: 'tok'
+            rpc = SimpleRPC(provider, uri='https://example.com/json-rpc/', verify_ssl=True,
                             proxies={'https': 'proxy'}, check_allow_transmit=check, retry=False, headers={'h': 'v'})
             result = rpc.call_rest('POST', 'analyze/dimension/node', params={'p': 1}, body={'b': 2})
         assert result == {'ok': 1}
         assert mock_rest.call_args == mock.call(
-            'tok', 'https://example.com/json-rpc/', 'POST', 'analyze/dimension/node', True,
+            provider, 'https://example.com/json-rpc/', 'POST', 'analyze/dimension/node', True,
             params={'p': 1}, body={'b': 2}, proxies={'https': 'proxy'}, check_allow_transmit=check,
-            retry=False, headers={'h': 'v'}, to_file=None,
+            retry=False, headers={'h': 'v'}, to_file=None, stream_download=False,
         )
 
     def test_forwards_the_file_to_write_the_body_to(self):
