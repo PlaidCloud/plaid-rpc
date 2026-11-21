@@ -108,6 +108,7 @@ REST_ROUTES = {
     'analyze/dimension/get_children_flattened': Route('POST', 'analyze/dimension/children-flattened'),
     'analyze/dimension/get_hierarchy': Route('POST', 'analyze/dimension/hierarchy'),
     'analyze/dimension/get_leaves': Route('POST', 'analyze/dimension/leaves'),
+    'analyze/dimension/get_version': Route('POST', 'analyze/dimension/version'),
     'analyze/dimension/hierarchy_table': Route('POST', 'analyze/dimension/hierarchy-table'),
     'analyze/dimension/is_dimension': Route('GET', 'analyze/dimension/is-dimension'),
     'analyze/dimension/lookup_by_name': Route('GET', 'analyze/dimension/lookup-by-name'),
