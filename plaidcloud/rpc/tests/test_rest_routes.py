@@ -141,6 +141,8 @@ CASES = [
      ('GET', 'organization/migration/databend-query-probe', {'timeout_s': 5}, None)),
     ('organization/migration/connection_decrypt_probe', {'timeout_s': 5},
      ('GET', 'organization/migration/connection-decrypt-probe', {'timeout_s': 5}, None)),
+    ('analyze/dimension/get_version', {'project_id': 'p', 'name': 'd'},
+     ('POST', 'analyze/dimension/version', None, {'project_id': 'p', 'name': 'd'})),
     ('organization/migration/dimension_read_probe', {'sample_limit': 3, 'timeout_s': 5},
      ('GET', 'organization/migration/dimension-read-probe', {'sample_limit': 3, 'timeout_s': 5}, None)),
 ]
