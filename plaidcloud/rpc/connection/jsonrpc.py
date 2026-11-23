@@ -52,8 +52,13 @@ DOWNLOAD_CONNECT_TIMEOUT = 30
 
 download_folder = os.path.join(tempfile.gettempdir(), "plaid/download")
 
-if not os.path.exists(download_folder):  # pragma: no cover
-    os.makedirs(download_folder)
+
+def _ensure_download_folder() -> None:
+    # exist_ok: concurrent workers importing this module race to create the folder
+    os.makedirs(download_folder, exist_ok=True)
+
+
+_ensure_download_folder()
 
 
 _rpc_context = threading.local()

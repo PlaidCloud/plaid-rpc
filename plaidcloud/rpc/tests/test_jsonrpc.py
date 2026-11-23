@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 
+import concurrent.futures
 import contextlib
 import io
 import json
@@ -1138,3 +1139,20 @@ def test_a_cancel_made_during_the_tls_handshake_takes_effect_once_it_completes(m
         assert not isinstance(outcome[0], requests.exceptions.Timeout)
     finally:
         close()
+
+
+class TestEnsureDownloadFolder:
+    def test_concurrent_creation_does_not_raise(self, tmp_path, monkeypatch):
+        threads_n = 16
+        for trial in range(30):
+            monkeypatch.setattr(jsonrpc, 'download_folder', str(tmp_path / f'trial{trial}' / 'download'))
+            barrier = threading.Barrier(threads_n)
+            with concurrent.futures.ThreadPoolExecutor(threads_n) as pool:
+                futures = [pool.submit(self._create_after, barrier) for _ in range(threads_n)]
+            for future in futures:
+                future.result()  # re-raises a losing thread's FileExistsError
+
+    @staticmethod
+    def _create_after(barrier):
+        barrier.wait()
+        jsonrpc._ensure_download_folder()
